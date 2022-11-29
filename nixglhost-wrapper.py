@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
 import argparse
+import json
 import os
 import re
-import subprocess
 import shutil
+import subprocess
 import sys
 
 IN_NIX_STORE = False
@@ -54,12 +55,37 @@ NVIDIA_DSO_NAMES = [
     "libnvidia-vulkan-producer\.so.*$",
     "libnvidia-wayland-client\.so.*$",
     "libnvoptix\.so.*$",
+
+    # Host dependencies required by the nvidia DSOs to properly
+    # operate
+
+    # libdrm
+    "libdrm\.so.*$",
+    # libffi
+    "libffi\.so.*$",
+    # libgbm
+    "libgbm\.so.*$",
+    # Cannot find that one :(
+    "libnvtegrahv\.so.*$",
+    # libexpat
+    "libexpat\.so.*$",
+    # libxcb
+    "libxcb-glx\.so.*$",
+    # Coming from libx11
+    "libX11-xcb\.so.*$",
+    "libX11\.so.*$",
+    "libXext\.so.*$",
+    # libwayland
+    "libwayland-server\.so.*$",
+    "libwayland-client\.so.*$",
+
 ]
 
 def find_nvidia_dsos(path):
     """Scans the PATH directory looking for the Nvidia driver shared
-    libraries. A shared library is considered as a Nvidia one if its
-    name maches a pattern contained in NVIDIA_DSO_NAMES.
+    libraries and their dependencies. A shared library is considered
+    as a Nvidia one if its name maches a pattern contained in
+    NVIDIA_DSO_NAMES.
 
     Returns the list of the DSOs absolute paths."""
 
@@ -79,7 +105,7 @@ def find_nvidia_dsos(path):
     return files
 
 
-def copy_and_patch_dsos_to_cache_dir(dsos, cache_dir):
+def copy_and_patch_dsos_to_libs_dir(dsos, libs_dir):
     """Copies the graphic vendor DSOs to the cache directory before
     patchelf-ing them.
 
@@ -94,11 +120,11 @@ def copy_and_patch_dsos_to_cache_dir(dsos, cache_dir):
     runpath to point to the cache directory."""
     for dso in dsos:
         basename = os.path.basename(dso)
-        newpath = os.path.join(cache_dir, basename)
+        newpath = os.path.join(libs_dir, basename)
         log_info(f"Copying {basename} to {newpath}")
         shutil.copyfile(dso, newpath)
         shutil.copymode(dso, newpath)
-        patch_dso(newpath, cache_dir)
+        patch_dso(newpath, libs_dir)
 
 
 def log_info(string):
@@ -109,15 +135,41 @@ def log_info(string):
 
 
 def patch_dso(dsoPath, rpath):
-    """Call patchelf to change the DSOPATH runpath with RPATH"""
+    """Call patchelf to change the DSOPATH runpath with RPATH."""
     log_info(f"Patching {dsoPath}")
     log_info(f"Exec: {PATCHELF_PATH} --set-rpath {rpath} {dsoPath}")
     res = subprocess.run([PATCHELF_PATH, "--set-rpath", rpath, dsoPath])
     if res.returncode != 0:
         raise (f"Cannot patch {dsoPath}. Patchelf exited with {res.returncode}")
 
+def generate_nvidia_egl_config_files(cache_dir, libs_dir):
+    """Generates a set of JSON files describing the EGL exec
+    envirnoment to libglvnd.
 
-def exec_binary(bin_path, args, cache_dir):
+    These configuration files will point to the EGL, wayland and GBM
+    Nvidia DSOs."""
+
+    def generate_egl_conf_json(dso):
+        return json.dumps({
+            "file_format_version": "1.0.0",
+            "ICD": {
+                "library_path": dso
+            }})
+
+    egl_conf_dir = os.path.join(cache_dir, "egl-confs")
+    os.makedirs(egl_conf_dir, exist_ok=True)
+    dso_paths = [ ("10_nvidia.json", f"{libs_dir}/libEGL_nvidia.so.0"),
+                  ("10_nvidia_wayland.json", f"{libs_dir}/libnvidia-egl-wayland.so.1"),
+                  ("15_nvidia_gbm.json", f"{libs_dir}/libnvidia-egl-gbm.so.1") ]
+
+    for (conf_file_name, dso_path) in dso_paths:
+        with open(os.path.join(egl_conf_dir, conf_file_name), "w", encoding = "utf-8") as f:
+            log_info(f"Writing {dso_path} conf to {egl_conf_dir}")
+            f.write(generate_egl_conf_json(dso_path))
+
+    return egl_conf_dir
+
+def exec_binary(bin_path, args, cache_dir, libs_dir):
     """Replace the current python program with the program pointed by
     BIN_PATH.
 
@@ -127,8 +179,11 @@ def exec_binary(bin_path, args, cache_dir):
     # The following two env variables are required by our patched libglvnd
     # implementation to figure out what kind of driver the host
     # machine is using.
-    os.environ["NIX_GLVND_GLX_PATH"] = cache_dir
+    os.environ["NIX_GLVND_GLX_PATH"] = libs_dir
     os.environ["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
+    # The following env variable is pointing to the directory
+    # containing the EGL configuration.
+    os.environ["__EGL_VENDOR_LIBRARY_DIRS"] = generate_nvidia_egl_config_files(cache_dir, libs_dir)
     os.execv(bin_path, [bin_path] + args)
 
 
@@ -140,15 +195,17 @@ def main(args):
     home = os.path.expanduser("~")
     xdg_cache_home = os.environ.get("XDG_CACHE_HOME", os.path.join(home, ".cache"))
     cache_dir = os.path.join(xdg_cache_home, "nix-gl-host")
+    libs_dir = os.path.join(cache_dir, "lib")
     os.makedirs(cache_dir, exist_ok=True)
+    os.makedirs(libs_dir, exist_ok=True)
     log_info(f'Using "{cache_dir}" as cache dir.')
     log_info(f'Scanning "{args.GL_VENDOR_PATH}" for DSOs.')
     dsos = find_nvidia_dsos(args.GL_VENDOR_PATH)
     log_info(f"Found the following DSOs:")
     [log_info(dso) for dso in dsos]
     log_info("Patching the DSOs.")
-    copy_and_patch_dsos_to_cache_dir(dsos, cache_dir)
-    exec_binary(args.NIX_BINARY, args.ARGS, cache_dir)
+    copy_and_patch_dsos_to_libs_dir(dsos, libs_dir)
+    exec_binary(args.NIX_BINARY, args.ARGS, cache_dir, libs_dir)
     return 0
 
 
