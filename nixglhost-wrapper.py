@@ -24,9 +24,7 @@ else:
 #
 # TODO: find a more systematic way to figure out these names *not
 # requiring to build/fetch the nvidia driver at runtime*.
-NVIDIA_DSO_NAMES = [
-    "libcudadebugger\.so.*$",
-    "libcuda\.so.*$",
+NVIDIA_DSO_PATTERNS = [
     "libEGL_nvidia\.so.*$",
     "libGLESv1_CM_nvidia\.so.*$",
     "libGLESv2_nvidia\.so.*$",
@@ -81,29 +79,48 @@ NVIDIA_DSO_NAMES = [
 
 ]
 
-def find_nvidia_dsos(path):
-    """Scans the PATH directory looking for the Nvidia driver shared
-    libraries and their dependencies. A shared library is considered
-    as a Nvidia one if its name maches a pattern contained in
-    NVIDIA_DSO_NAMES.
+CUDA_DSO_PATTERNS = [
+    "libcudadebugger\.so.*$",
+    "libcuda\.so.*$"
+]
+
+def find_files(path, files_patterns):
+    """Scans the PATH directory looking for the files complying with
+    the FILES_PATTERNS regexes list.
 
     Returns the list of the DSOs absolute paths."""
-
     files = []
 
-    def is_nvidia_dso(filename):
-        for pattern in NVIDIA_DSO_NAMES:
+    def is_dso_matching_pattern(filename):
+        for pattern in files_patterns:
             if re.search(pattern, filename):
                 return True
         return False
 
     for f in os.listdir(path):
         abs_file_path = os.path.abspath(os.path.join(path, f))
-        if os.path.isfile(abs_file_path) and is_nvidia_dso(abs_file_path):
+        if os.path.isfile(abs_file_path) and is_dso_matching_pattern(abs_file_path):
             files.append(abs_file_path)
 
     return files
 
+def find_nvidia_dsos(path):
+    """Scans the PATH directory looking for the Nvidia driver shared
+    libraries and their dependencies. A shared library is considered
+    as a Nvidia one if its name maches a pattern contained in
+    CUDA_DSO_PATTERNS.
+
+    Returns the list of the DSOs absolute paths."""
+    return find_files(path, NVIDIA_DSO_PATTERNS)
+
+def find_cuda_dsos(path):
+    """Scans the PATH directory looking for the cuda driver shared
+    libraries. A shared library is considered
+    as a cuda one if its name maches a pattern contained in
+    CUDA_DSO_PATTERNS.
+
+    Returns the list of the DSOs absolute paths."""
+    return find_files(path, CUDA_DSO_PATTERNS)
 
 def copy_and_patch_dsos_to_libs_dir(dsos, libs_dir):
     """Copies the graphic vendor DSOs to the cache directory before
