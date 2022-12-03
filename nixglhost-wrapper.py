@@ -79,6 +79,8 @@ NVIDIA_DSO_PATTERNS = [
 
 CUDA_DSO_PATTERNS = ["libcudadebugger\.so.*$", "libcuda\.so.*$"]
 
+GLX_DSO_PATTERNS = ["libGLX_nvidia\.so.*$"]
+
 
 def find_files(path: str, files_patterns: List[str]):
     """Scans the PATH directory looking for the files complying with
@@ -240,10 +242,12 @@ def nvidia_main(cache_dir: str, gl_vendor_path: str):
     cache_dir = os.path.join(cache_dir, "nvidia")
     libs_dir = os.path.join(cache_dir, "lib")
     cuda_dir = os.path.join(cache_dir, "cuda")
+    glx_dir = os.path.join(cache_dir, "glx")
     log_info(f"Nvidia libs dir: {libs_dir}")
     log_info(f"Nvidia cuda dir: {libs_dir}")
     os.makedirs(libs_dir, exist_ok=True)
     os.makedirs(cuda_dir, exist_ok=True)
+    os.makedirs(glx_dir, exist_ok=True)
     log_info(f"Searching for the Nvidia OpenGL DSOs in {gl_vendor_path}")
     # Nvidia OpenGL DSOs
     opengl_dsos = find_files(gl_vendor_path, NVIDIA_DSO_PATTERNS)
@@ -251,7 +255,6 @@ def nvidia_main(cache_dir: str, gl_vendor_path: str):
     [log_info(dso) for dso in opengl_dsos]
     log_info("Patching the DSOs.")
     copy_and_patch_libs(opengl_dsos, libs_dir)
-    log_info("Setting NVIDIA-specific env variables.")
     # Nvidia Cuda DSOs
     log_info(f"Searching for the Nvidia Cuda DSOs in {gl_vendor_path}")
     cuda_dsos = find_files(gl_vendor_path, CUDA_DSO_PATTERNS)
@@ -259,8 +262,15 @@ def nvidia_main(cache_dir: str, gl_vendor_path: str):
     [log_info(dso) for dso in cuda_dsos]
     log_info("Patching the DSOs.")
     copy_and_patch_libs(cuda_dsos, cuda_dir, libs_dir)
-    log_info("Setting NVIDIA-specific env variables.")
+    # GLX DSOs
+    log_info(f"Searching for the Nvidia GLX DSOs in {gl_vendor_path}")
+    glx_dsos = find_files(gl_vendor_path, GLX_DSO_PATTERNS)
+    log_info(f"Found the following DSOs:")
+    [log_info(dso) for dso in glx_dsos]
+    log_info("Patching the DSOs.")
+    copy_and_patch_libs(glx_dsos, glx_dir, libs_dir)
     # Preparing the env
+    log_info("Setting NVIDIA-specific env variables.")
     new_env = {}
     log_info(f"__GLX_VENDOR_LIBRARY_NAME = nvidia")
     new_env["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
@@ -268,8 +278,11 @@ def nvidia_main(cache_dir: str, gl_vendor_path: str):
     log_info(f"__EGL_VENDOR_LIBRARY_DIRS = {egl_config_files}")
     new_env["__EGL_VENDOR_LIBRARY_DIRS"] = egl_config_files
     ld_library_path = os.environ.get("LD_LIBRARY_PATH", None)
+    nv_ld_library_path = f"{cuda_dir}:{glx_dir}"
     ld_library_path = (
-        cuda_dir if ld_library_path is None else f"{cuda_dir}:{ld_library_path}"
+        nv_ld_library_path
+        if ld_library_path is None
+        else f"{nv_ld_library_path}:{ld_library_path}"
     )
     log_info(f"LD_LIBRARY_PATH = {ld_library_path}")
     new_env["LD_LIBRARY_PATH"] = ld_library_path
