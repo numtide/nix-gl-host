@@ -82,7 +82,7 @@ CUDA_DSO_PATTERNS = ["libcudadebugger\.so.*$", "libcuda\.so.*$"]
 GLX_DSO_PATTERNS = ["libGLX_nvidia\.so.*$"]
 
 
-def find_files(path: str, files_patterns: List[str]):
+def find_files(path: str, files_patterns: List[str]) -> List[str]:
     """Scans the PATH directory looking for the files complying with
     the FILES_PATTERNS regexes list.
 
@@ -103,27 +103,7 @@ def find_files(path: str, files_patterns: List[str]):
     return files
 
 
-def find_nvidia_dsos(path: str):
-    """Scans the PATH directory looking for the Nvidia driver shared
-    libraries and their dependencies. A shared library is considered
-    as a Nvidia one if its name maches a pattern contained in
-    CUDA_DSO_PATTERNS.
-
-    Returns the list of the DSOs absolute paths."""
-    return find_files(path, NVIDIA_DSO_PATTERNS)
-
-
-def find_cuda_dsos(path: str):
-    """Scans the PATH directory looking for the cuda driver shared
-    libraries. A shared library is considered
-    as a cuda one if its name maches a pattern contained in
-    CUDA_DSO_PATTERNS.
-
-    Returns the list of the DSOs absolute paths."""
-    return find_files(path, CUDA_DSO_PATTERNS)
-
-
-def copy_and_patch_libs(dsos: List[str], libs_dir: str, rpath=None):
+def copy_and_patch_libs(dsos: List[str], libs_dir: str, rpath=None) -> None:
     """Copies the graphic vendor DSOs to the cache directory before
     patchelf-ing them.
 
@@ -145,14 +125,14 @@ def copy_and_patch_libs(dsos: List[str], libs_dir: str, rpath=None):
         patch_dso(newpath, rpath)
 
 
-def log_info(string: str):
+def log_info(string: str) -> None:
     """Prints STR to STDERR if the DEBUG environment variable is
     set."""
     if "DEBUG" in os.environ:
         print(f"[+] {string}", file=sys.stderr)
 
 
-def patch_dso(dsoPath: str, rpath: str):
+def patch_dso(dsoPath: str, rpath: str) -> None:
     """Call patchelf to change the DSOPATH runpath with RPATH."""
     log_info(f"Patching {dsoPath}")
     log_info(f"Exec: {PATCHELF_PATH} --set-rpath {rpath} {dsoPath}")
@@ -166,7 +146,7 @@ def patch_dso(dsoPath: str, rpath: str):
     # some loosely connected parts together for no good reason.
 
 
-def generate_nvidia_egl_config_files(cache_dir: str, libs_dir: str):
+def generate_nvidia_egl_config_files(cache_dir: str, libs_dir: str) -> str:
     """Generates a set of JSON files describing the EGL exec
     envirnoment to libglvnd.
 
@@ -196,7 +176,7 @@ def generate_nvidia_egl_config_files(cache_dir: str, libs_dir: str):
     return egl_conf_dir
 
 
-def exec_binary(bin_path: str, args: List[str], cache_dir: str, libs_dir: str):
+def exec_binary(bin_path: str, args: List[str]) -> None:
     """Replace the current python program with the program pointed by
     BIN_PATH.
 
@@ -209,7 +189,7 @@ def exec_binary(bin_path: str, args: List[str], cache_dir: str, libs_dir: str):
     os.execv(bin_path, [bin_path] + args)
 
 
-def nvidia_main(cache_dir: str, gl_vendor_path: str):
+def nvidia_main(cache_dir: str, gl_vendor_path: str) -> Dict:
     """Prepares the environment necessary to run a opengl/cuda program
     on a Nvidia graphics card. It is by definition really stateful.
 
@@ -252,21 +232,24 @@ def nvidia_main(cache_dir: str, gl_vendor_path: str):
     # Nvidia OpenGL DSOs
     opengl_dsos = find_files(gl_vendor_path, NVIDIA_DSO_PATTERNS)
     log_info(f"Found the following DSOs:")
-    [log_info(dso) for dso in opengl_dsos]
+    for dso in opengl_dsos:
+        log_info(dso)
     log_info("Patching the DSOs.")
     copy_and_patch_libs(opengl_dsos, libs_dir)
     # Nvidia Cuda DSOs
     log_info(f"Searching for the Nvidia Cuda DSOs in {gl_vendor_path}")
     cuda_dsos = find_files(gl_vendor_path, CUDA_DSO_PATTERNS)
     log_info(f"Found the following DSOs:")
-    [log_info(dso) for dso in cuda_dsos]
+    for dso in cuda_dsos:
+        log_info(dso)
     log_info("Patching the DSOs.")
     copy_and_patch_libs(cuda_dsos, cuda_dir, libs_dir)
     # GLX DSOs
     log_info(f"Searching for the Nvidia GLX DSOs in {gl_vendor_path}")
     glx_dsos = find_files(gl_vendor_path, GLX_DSO_PATTERNS)
     log_info(f"Found the following DSOs:")
-    [log_info(dso) for dso in glx_dsos]
+    for dso in glx_dsos:
+        log_info(dso)
     log_info("Patching the DSOs.")
     copy_and_patch_libs(glx_dsos, glx_dir, libs_dir)
     # Preparing the env
@@ -296,10 +279,9 @@ def main(args):
     log_info(f'Using "{cache_dir}" as cache dir.')
     os.makedirs(cache_dir, exist_ok=True)
     log_info(f'Scanning "{args.GL_VENDOR_PATH}" for DSOs.')
-    dsos = find_nvidia_dsos(args.GL_VENDOR_PATH)
     new_env = nvidia_main(cache_dir, args.GL_VENDOR_PATH)
     os.environ.update(new_env)
-    exec_binary(args.NIX_BINARY, args.ARGS, cache_dir, libs_dir)
+    exec_binary(args.NIX_BINARY, args.ARGS)
     return 0
 
 
