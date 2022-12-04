@@ -19,12 +19,15 @@ pkgs.stdenvNoCC.mkDerivation {
     patchShebangs $out/bin/nixglhost
   '';
 
-  postCheck = ''
-    black --check $out/bin/nixglhost
+  doCheck = true;
+
+  checkPhase = ''
+    black --check src/*.py
     nixpkgs-fmt --check *.nix
+    python src/nixglhost_wrapper_test.py
   '';
 
   installPhase = ''
-    install -D -m0755 nixglhost-wrapper.py $out/bin/nixglhost
+    install -D -m0755 src/nixglhost_wrapper.py $out/bin/nixglhost
   '';
 }
