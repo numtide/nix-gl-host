@@ -1,48 +1,41 @@
 # NixGLHost
 
-Running OpenGL Nix-built binaries on a foreign Linux distro is quite often a challenge. NixGLHost glues a nix-built program to your host system graphics drivers.
+Running OpenGL/Cuda/OpenCL Nix-built binaries on a foreign Linux distro is quite often a challenge. These programs are relying on some host-specific graphics drivers at runtime. These drivers are host-specific, it is obviously impossible to distribute the drivers for each and every hosts setup through a pre-defined generic nix closure.
+
+NixGLHost solves this issue by re-using your host system graphics drivers. It copies them to an isolated environment and inject the said environment to the Nix runtime closure.
 
 Current status: experimental.
 
 # How to Use
 
-First of all, build your Opengl program with our custom libglvnd. You can use this project's flake default overlay as a convenience. Let's build glxgears, living in the glxinfo derivation:
+All you have to do is to wrap your nix-built OpenGL/Cuda program with `nixglhost`:
 
-```sh
-nix build .#glxinfo
+For instance, let's say you want to run `my-gl-program`, a `nix-built` program on your favorite distribution. All you'll have to do is:
+
+```
+nixglhost my-gl-program
 ```
 
-Let say that your host graphics drivers are stored in `/lib/x86_64-linux-gnu/`. TODO: explain how to figure out where are the host graphic drivers.
+## Example
 
-You can run glxgear with your host graphics driver using:
+Let's nix-build glxgears, living in the glxinfo Nixpkgs derivation then execute it with nixglhost.
 
 ```sh
+cd $thisRepoCheckout
 PATH=$(nix build --print-out-paths)/bin:$PATH
-nixglhost /lib/x86_64-linux-gnu $(nix build  --print-out-paths .#glxinfo)/bin/glxgears
+nixglhost $(nix build  --print-out-paths .#glxinfo)/bin/glxgears
 ```
 
-# NixGLHost Approach
+# Internals
 
-Re-using the host graphics dynamic libraries turned out being quite challenging.
-
-NixGLHost relies on a [patched libGLvnd](https://github.com/NinjaTrappeur/libglvnd/commit/f4dff011f78ecd5a69871d4a8ddf3c742de5f621) to inject the host DSOs without polluting the `LD_LIBRARY_PATH`. You can use the `./overlays/nixpkgs.nix` nixpkgs overlay (exposed via `flake.nix` for external projects) to build a binary with this custom libglvnd.
-
-Here's how everything works:
-
-1. Detect the host vendor graphic DSOs via some heuristics.
-1. Copy the host vendor DSOs to a cache location.
-1. Modify the cached DSOs runpath to point to the cache. The graphics DSOs depend on each other and won't be able to find each other using the default Nix `LD_LIBRARY_PATH`.
-1. Inject the libGLVnd-specific env variables to point to the patched vendor lib.
-1. Execute the wrapped binary.
-
-This approach won't affect the Nix hermiticity: the only "external" DSOs loaded to the Nix-built program are the host-specific graphics drivers.
+You can read the [INTERNALS.md](INTERNALS.md) file to learn how exactly `NixGLHost` works.
 
 # Support
 
 - [-] Proprietary Nvidia
   - [x] GLX
-  - [ ] EGL
-  - [ ] Cuda
+  - [x] EGL
+  - [x] Cuda
   - [ ] OpenCL
 - [ ] Mesa
   - [ ] GLX
@@ -51,7 +44,7 @@ This approach won't affect the Nix hermiticity: the only "external" DSOs loaded 
 
 # Alternative Approaches
 
--  [NixGL](https://github.com/guibou/nixGL): tries to auto detect the host vendor driver, download it again, store it in the nix-store then wraps the nix-built binary and inject the downloaded vendor driver through `LD_LIBRARY_PATH`.
+-  [NixGL](https://github.com/guibou/nixGL): tries to auto detect the host vendor driver type/version, then download/install it from its Nixpkgs derivation.
 
 # Authors/Maintainers
 
