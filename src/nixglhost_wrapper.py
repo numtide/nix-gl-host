@@ -419,9 +419,6 @@ def exec_binary(bin_path: str, args: List[str]) -> None:
     Sets the relevant libGLvnd env variables."""
     log_info(f"Execv-ing {bin_path}")
     log_info(f"Goodbye now.")
-    # The following two env variables are required by our patched libglvnd
-    # implementation to figure out what kind of driver the host
-    # machine is using.
     os.execvp(bin_path, [bin_path] + args)
 
 
@@ -432,7 +429,14 @@ def main(args):
     cache_dir = os.path.join(xdg_cache_home, "nix-gl-host")
     log_info(f'Using "{cache_dir}" as cache dir.')
     os.makedirs(cache_dir, exist_ok=True)
-    host_dsos_paths: List[str] = get_ld_paths()
+    if args.driver_directory:
+        log_info(
+            f"Retreiving DSOs from the specified directory: {args.driver_directory}"
+        )
+        host_dsos_paths: List[str] = [args.driver_directory]
+    else:
+        log_info("Retrieving DSOs from the load path.")
+        host_dsos_paths: List[str] = get_ld_paths()
     new_env = nvidia_main(cache_dir, host_dsos_paths)
     os.environ.update(new_env)
     log_info(f"{time.time() - start_time} seconds elapsed since script start.")
@@ -444,6 +448,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         prog="nixglhost-wrapper",
         description="Wrapper used to massage the host GL drivers to work with your nix-built binary.",
+    )
+    parser.add_argument(
+        "-d",
+        "--driver-directory",
+        type=str,
+        help="Use the driver libraries contained in this directory instead of discovering them from the load path.",
+        default=None,
     )
     parser.add_argument(
         "NIX_BINARY",
