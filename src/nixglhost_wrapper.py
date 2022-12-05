@@ -422,7 +422,7 @@ def exec_binary(bin_path: str, args: List[str]) -> None:
     # The following two env variables are required by our patched libglvnd
     # implementation to figure out what kind of driver the host
     # machine is using.
-    os.execv(bin_path, [bin_path] + args)
+    os.execvp(bin_path, [bin_path] + args)
 
 
 def main(args):
