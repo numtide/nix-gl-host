@@ -14,6 +14,7 @@ from glob import glob
 from typing import List, Literal, Dict, Tuple, TypedDict, TextIO, Optional
 
 IN_NIX_STORE = False
+CACHE_VERSION = 2
 
 
 if IN_NIX_STORE:
@@ -25,8 +26,14 @@ else:
 
 
 class ResolvedLib:
-    def __init__(self, name: str, fullpath: str, sha256: Optional[str] = None):
+    """This data type encapsulate one host dynamically shared object
+    together with some metadata helping us to uniquely identify it."""
+
+    def __init__(
+        self, name: str, dirpath: str, fullpath: str, sha256: Optional[str] = None
+    ):
         self.name: str = name
+        self.dirpath: str = dirpath
         self.fullpath: str = fullpath
         if sha256 is None:
             h = hashlib.sha256()
@@ -38,63 +45,114 @@ class ResolvedLib:
         self.sha256: str = sha
 
     def __repr__(self):
-        return f"ResolvedLib<{self.name}, {self.fullpath}, {self.sha256}>"
+        return (
+            f"ResolvedLib<{self.name}, {self.dirpath}, {self.fullpath}, {self.sha256}>"
+        )
 
     def to_dict(self) -> Dict:
-        return {"name": self.name, "fullpath": self.fullpath, "sha256": self.sha256}
+        return {
+            "name": self.name,
+            "dirpath": self.dirpath,
+            "fullpath": self.fullpath,
+            "sha256": self.sha256,
+        }
+
+    def __hash__(self):
+        return hash((self.name, self.dirpath, self.fullpath, self.sha256))
 
     def __eq__(self, o):
         return (
             self.name == o.name
             and self.fullpath == o.fullpath
             and self.sha256 == o.sha256
+            and self.dirpath == o.dirpath
         )
 
     @classmethod
     def from_dict(cls, d: Dict):
-        return ResolvedLib(d["name"], d["fullpath"], d["sha256"])
+        return ResolvedLib(d["name"], d["dirpath"], d["fullpath"], d["sha256"])
 
 
-class HostDSOs:
+class LibraryPath:
+    """This data type encapsulates a directory containing some GL/Cuda
+    dynamically shared objects."""
+
     def __init__(
         self,
-        glx: Dict[str, ResolvedLib],
-        cuda: Dict[str, ResolvedLib],
-        generic: Dict[str, ResolvedLib],
-        version: int = 1,
+        glx: List[ResolvedLib],
+        cuda: List[ResolvedLib],
+        generic: List[ResolvedLib],
+        egl: List[ResolvedLib],
+        path: str,
     ):
         self.glx = glx
         self.cuda = cuda
         self.generic = generic
-        self.version = version
+        self.egl = egl
+        self.path = path
 
     def __eq__(self, other):
         return (
-            self.glx == other.glx
-            and self.cuda == other.cuda
-            and self.generic == other.generic
-            and self.version == other.version
+            set(self.glx) == set(other.glx)
+            and set(self.cuda) == set(other.cuda)
+            and set(self.generic) == set(other.generic)
+            and set(self.egl) == set(other.egl)
+            and self.path == other.path
         )
 
-    def to_json(self) -> str:
-        return json.dumps(
-            {
-                "version": 1,
-                "glx": {k: v.to_dict() for k, v in self.glx.items()},
-                "cuda": {k: v.to_dict() for k, v in self.cuda.items()},
-                "generic": {k: v.to_dict() for k, v in self.generic.items()},
-            },
-            sort_keys=True,
+    def __hash__(self):
+        return hash(
+            (
+                tuple(self.glx),
+                tuple(self.cuda),
+                tuple(self.generic),
+                tuple(self.egl),
+                self.path,
+            )
         )
+
+    def to_dict(self) -> Dict:
+        return {
+            "glx": [v.to_dict() for v in self.glx],
+            "cuda": [v.to_dict() for v in self.cuda],
+            "generic": [v.to_dict() for v in self.generic],
+            "egl": [v.to_dict() for v in self.egl],
+            "path": self.path,
+        }
 
     @classmethod
-    def from_json(cls, o: str):
-        d: Dict = json.loads(o)
-        return HostDSOs(
-            version=d["version"],
-            glx={k: ResolvedLib.from_dict(v) for k, v in d["glx"].items()},
-            cuda={k: ResolvedLib.from_dict(v) for k, v in d["cuda"].items()},
-            generic={k: ResolvedLib.from_dict(v) for k, v in d["generic"].items()},
+    def from_dict(cls, d: Dict):
+        return LibraryPath(
+            glx=[ResolvedLib.from_dict(v) for v in d["glx"]],
+            cuda=[ResolvedLib.from_dict(v) for v in d["cuda"]],
+            generic=[ResolvedLib.from_dict(v) for v in d["generic"]],
+            egl=[ResolvedLib.from_dict(v) for v in d["egl"]],
+            path=d["path"],
+        )
+
+
+class CacheDirContent:
+    """This datatype encapsulates all the dynamically shared objects
+    living in the nix-gl-host cache. We mostly use it to serialize
+    what's in the cache on the disk and compare this content to what
+    we scanned in the host system."""
+
+    def __init__(self, paths: List[LibraryPath], version: int = CACHE_VERSION):
+        self.paths: List[LibraryPath] = paths
+        self.version: int = CACHE_VERSION
+
+    def to_json(self):
+        d = {"paths": [p.to_dict() for p in self.paths], "version": self.version}
+        return json.dumps(d, sort_keys=True)
+
+    def __eq__(self, o):
+        return self.version == o.version and set(self.paths) == set(o.paths)
+
+    @classmethod
+    def from_json(cls, j: str):
+        d: Dict = json.loads(j)
+        return CacheDirContent(
+            version=d["version"], paths=[LibraryPath.from_dict(p) for p in d["paths"]]
         )
 
 
@@ -104,6 +162,7 @@ class HostDSOs:
 #
 # TODO: find a more systematic way to figure out these names *not
 # requiring to build/fetch the nvidia driver at runtime*.
+# TODO: compile the regexes
 NVIDIA_DSO_PATTERNS = [
     "libEGL_nvidia\.so.*$",
     "libGLESv1_CM_nvidia\.so.*$",
@@ -132,6 +191,8 @@ NVIDIA_DSO_PATTERNS = [
     "libnvidia-vulkan-producer\.so.*$",
     "libnvidia-wayland-client\.so.*$",
     "libnvoptix\.so.*$",
+    # Cannot find that one :(
+    "libnvtegrahv\.so.*$",
     # Host dependencies required by the nvidia DSOs to properly
     # operate
     # libdrm
@@ -140,8 +201,6 @@ NVIDIA_DSO_PATTERNS = [
     "libffi\.so.*$",
     # libgbm
     "libgbm\.so.*$",
-    # Cannot find that one :(
-    "libnvtegrahv\.so.*$",
     # libexpat
     "libexpat\.so.*$",
     # libxcb
@@ -158,6 +217,12 @@ NVIDIA_DSO_PATTERNS = [
 CUDA_DSO_PATTERNS = ["libcudadebugger\.so.*$", "libcuda\.so.*$"]
 
 GLX_DSO_PATTERNS = ["libGLX_nvidia\.so.*$"]
+
+EGL_DSO_PATTERNS = [
+    "libEGL_nvidia\.so.*$",
+    "libnvidia-egl-wayland\.so.*$",
+    "libnvidia-egl-gbm\.so.*$",
+]
 
 
 def get_ld_paths() -> List[str]:
@@ -210,14 +275,12 @@ def get_ld_paths() -> List[str]:
     return [path for path in paths if os.path.isdir(path)]
 
 
-def resolve_libraries(
-    paths: List[str], files_patterns: List[str]
-) -> Dict[str, ResolvedLib]:
+def resolve_libraries(path: str, files_patterns: List[str]) -> List[ResolvedLib]:
     """Scans the PATH directory looking for the files complying with
-    the FILES_PATTERNS regexes list. Each file matching the pattern will be found only once
+    the FILES_PATTERNS regexes list.
 
     Returns the list of the resolved DSOs."""
-    libraries: Dict[str, ResolvedLib] = {}
+    libraries: List[ResolvedLib] = []
 
     def is_dso_matching_pattern(filename):
         for pattern in files_patterns:
@@ -225,19 +288,18 @@ def resolve_libraries(
                 return True
         return False
 
-    for path in paths:
-        for fname in os.listdir(path):
-            abs_file_path = os.path.abspath(os.path.join(path, fname))
-            if (
-                os.path.isfile(abs_file_path)
-                and is_dso_matching_pattern(abs_file_path)
-                and (fname not in libraries)
-            ):
-                libraries[fname] = ResolvedLib(fname, abs_file_path)
+    for fname in os.listdir(path):
+        abs_file_path = os.path.abspath(os.path.join(path, fname))
+        if os.path.isfile(abs_file_path) and is_dso_matching_pattern(abs_file_path):
+            libraries.append(
+                ResolvedLib(name=fname, dirpath=path, fullpath=abs_file_path)
+            )
     return libraries
 
 
-def copy_and_patch_libs(dsos: List[ResolvedLib], libs_dir: str, rpath=None) -> None:
+def copy_and_patch_libs(
+    dsos: List[ResolvedLib], dest_dir: str, rpath: Optional[str] = None
+) -> None:
     """Copies the graphic vendor DSOs to the cache directory before
     patchelf-ing them.
 
@@ -246,13 +308,13 @@ def copy_and_patch_libs(dsos: List[ResolvedLib], libs_dir: str, rpath=None) -> N
     binary env. The only option left is to patch their ELFs runpath to
     point to RPATH.
 
-    We also don't want to directly modify the host DSOs, we first copy
-    them to the user's personal cache directory. We then alter their
-    runpath to point to the cache directory."""
-    rpath = rpath if (rpath is not None) else libs_dir
+    We also don't want to directly modify the host DSOs. In the end,
+    we first copy them to the user's personal cache directory, we then
+    alter their runpath to point to the cache directory."""
+    rpath = rpath if (rpath is not None) else dest_dir
     for dso in dsos:
         basename = os.path.basename(dso.fullpath)
-        newpath = os.path.join(libs_dir, basename)
+        newpath = os.path.join(dest_dir, basename)
         log_info(f"Copying and patching {dso} to {newpath}")
         shutil.copyfile(dso.fullpath, newpath)
         # Provide write permissions to ensure we can patch this binary.
@@ -277,18 +339,15 @@ def patch_dso(dsoPath: str, rpath: str) -> None:
             f"Cannot patch {dsoPath}. Patchelf exited with {res.returncode}"
         )
 
-    # NOTE: is this the right abstraction? Looks like I'm stitching
-    # some loosely connected parts together for no good reason.
 
-
-def generate_nvidia_egl_config_files(
-    cache_dir: str, libs_dir: str, egl_conf_dir: str
-) -> str:
+def generate_nvidia_egl_config_files(egl_conf_dir: str) -> None:
     """Generates a set of JSON files describing the EGL exec
     envirnoment to libglvnd.
 
     These configuration files will point to the EGL, wayland and GBM
-    Nvidia DSOs."""
+    Nvidia DSOs. We're only specifying the DSOs names here to give the
+    linker enough legroom to load the most appropriate DSO from the
+    LD_LIBRARY_PATH."""
 
     def generate_egl_conf_json(dso):
         return json.dumps(
@@ -296,37 +355,99 @@ def generate_nvidia_egl_config_files(
         )
 
     dso_paths = [
-        ("10_nvidia.json", f"{libs_dir}/libEGL_nvidia.so.0"),
-        ("10_nvidia_wayland.json", f"{libs_dir}/libnvidia-egl-wayland.so.1"),
-        ("15_nvidia_gbm.json", f"{libs_dir}/libnvidia-egl-gbm.so.1"),
+        ("10_nvidia.json", f"libEGL_nvidia.so.0"),
+        ("10_nvidia_wayland.json", f"libnvidia-egl-wayland.so.1"),
+        ("15_nvidia_gbm.json", f"libnvidia-egl-gbm.so.1"),
     ]
 
-    for (conf_file_name, dso_path) in dso_paths:
+    for (conf_file_name, dso_name) in dso_paths:
+        os.makedirs(egl_conf_dir, exist_ok=True)
         with open(
             os.path.join(egl_conf_dir, conf_file_name), "w", encoding="utf-8"
         ) as f:
-            log_info(f"Writing {dso_path} conf to {egl_conf_dir}")
-            f.write(generate_egl_conf_json(dso_path))
-
-    return egl_conf_dir
+            log_info(f"Writing {dso_name} conf to {egl_conf_dir}")
+            f.write(generate_egl_conf_json(dso_name))
 
 
-def is_dso_cache_up_to_date(dsos: HostDSOs, cache_file_path: str) -> bool:
-    """Check whether or not we need to udate the host DSOs cache.
+def is_dso_cache_up_to_date(dsos: CacheDirContent, cache_file_path: str) -> bool:
+    """Check whether or not we need to update the cache.
 
     We keep what's in the cache through a JSON file stored at the root
-    of the cache_dir. We consider a DSO to be up to date if its name
-    and its content sha256 are equivalent.
-    """
+    of the cache_dir. We consider a dynamically shared object to be up
+    to date if its name, its full path and its content sha256 are
+    equivalent."""
     log_info("Checking if the cache is up to date")
     if os.path.isfile(cache_file_path):
         with open(cache_file_path, "r", encoding="utf8") as f:
             try:
-                cached_dsos: HostDSOs = HostDSOs.from_json(f.read())
+                cached_dsos: CacheDirContent = CacheDirContent.from_json(f.read())
             except:
                 return False
             return dsos == cached_dsos
     return False
+
+
+def scan_dsos_from_dir(path: str) -> Optional[LibraryPath]:
+    """Look for the different kind of DSOs we're searching in a
+    particular library path.
+    This will match and hash the content of each object we're
+    interested in."""
+    generic = resolve_libraries(path, NVIDIA_DSO_PATTERNS)
+    if len(generic) > 0:
+        cuda = resolve_libraries(path, CUDA_DSO_PATTERNS)
+        glx = resolve_libraries(path, GLX_DSO_PATTERNS)
+        egl = resolve_libraries(path, EGL_DSO_PATTERNS)
+        return LibraryPath(glx=glx, cuda=cuda, generic=generic, egl=egl, path=path)
+    else:
+        return None
+
+
+def cache_library_path(library_path: LibraryPath, cache_dir_root: str) -> str:
+    """Generate a cache directory for the LIBRARY_PATH host directory.
+
+    This cache directory is mirroring the host directory containing
+    the graphics card drivers. Its full name is hashed: it's an
+    attempt to keep the final LD_LIBRARY_PATH reasonably sized.
+
+    Returns the full path of the cache directory created by this
+    function."""
+    # Hash Computation
+    h = hashlib.sha256()
+    h.update(library_path.path.encode("utf8"))
+    path_hash: str = h.hexdigest()
+    # Paths
+    cache_path_root: str = os.path.join(cache_dir_root, path_hash)
+    lib_dir = os.path.join(cache_path_root, "lib")
+    cuda_dir = os.path.join(cache_path_root, "cuda")
+    egl_dir = os.path.join(cache_path_root, "egl")
+    glx_dir = os.path.join(cache_path_root, "glx")
+    # Copy and patch DSOs
+    for dsos, d in [
+        (library_path.generic, lib_dir),
+        (library_path.cuda, cuda_dir),
+        (library_path.egl, egl_dir),
+        (library_path.glx, glx_dir),
+    ]:
+        os.makedirs(d, exist_ok=True)
+        copy_and_patch_libs(dsos=dsos, dest_dir=d, rpath=lib_dir)
+    return cache_path_root
+
+
+def generate_cache_ld_library_path(cache_paths: List[str]) -> str:
+    """Generates the LD_LIBRARY_PATH colon-separated string pointing
+    to the cached DSOs living inside the CACHE_PATHS.
+
+    CACHE_PATH being a list pointing to the root of all the cached
+    library paths.
+    """
+    ld_library_paths: List[str] = []
+    for path in cache_paths:
+        ld_library_paths = ld_library_paths + [
+            f"{path}/glx",
+            f"{path}/cuda",
+            f"{path}/egl",
+        ]
+    return ":".join(ld_library_paths)
 
 
 def nvidia_main(
@@ -338,80 +459,76 @@ def nvidia_main(
     Roughly, we're going to:
 
     1. Setup the nvidia cache directory.
-    2. Find the nvidia DSOs in the DSO_VENDOR_PATH.
+    2. Find the nvidia DSOs in the DSO_VENDOR_PATHS directories.
     3. Copy these DSOs to their appropriate cache directories.
     4. Generate the EGL configuration files.
     5. Patchelf the runpath of what needs to be patched.
     6. Generate the env variables the main process is supposed to set.
 
-    Overall, we're using two different tricks to setup the GL/cuda envs:
-
-    - For Cuda and GLX: we're isolating the main DSOs in their own
-      dirs, add these dirs to the LD_LIBRARY_PATH and patch their
-      runpath to point to the generic cache dir.
-    - For EGL: we're generating some JSON configuration files.
-      libglvnd will later use these configuration files to directly
-      load the appropriate DSOs. We don't need any
-      LD_LIBRARY_PATH-fueled trick.
-
     Keep in mind we want to keep the host system out of the
     LD_LIBRARY_PATH to make sure we won't inject any host DSOs (other
     than the GL/Cuda ones OFC) to the nix-built program.
 
+    We're isolating the main DSOs for GLX/EGL/Cuda in their own dirs,
+    add add these directory to the LD_LIBRARY_PATH. We patch their
+    runpaths to point to the generic cache dir, containing all the
+    libraries we don't want to expose to the program we're wrapping.
+
     This function returns a dictionary containing the env variables
     supposed to be added to the current process down the line."""
     log_info("Nvidia routine begins")
-    log_info("Setting up Nvidia cache directory")
-    cache_dir = os.path.join(cache_dir, "nvidia")
-    libs_dir = os.path.join(cache_dir, "lib")
-    cuda_dir = os.path.join(cache_dir, "cuda")
-    glx_dir = os.path.join(cache_dir, "glx")
-    egl_dir = os.path.join(cache_dir, "egl-confs")
-    cache_file_path = os.path.join(cache_dir, "cache.json")
-    log_info(f"Nvidia libs dir: {libs_dir}")
-    log_info(f"Nvidia cuda dir: {libs_dir}")
-    os.makedirs(libs_dir, exist_ok=True)
-    os.makedirs(cuda_dir, exist_ok=True)
-    os.makedirs(glx_dir, exist_ok=True)
-    os.makedirs(egl_dir, exist_ok=True)
     # Find Host DSOS
     log_info("Searching for the host DSOs")
-    dsos: HostDSOs = HostDSOs(
-        generic=resolve_libraries(dso_vendor_paths, NVIDIA_DSO_PATTERNS),
-        cuda=resolve_libraries(dso_vendor_paths, CUDA_DSO_PATTERNS),
-        glx=resolve_libraries(dso_vendor_paths, GLX_DSO_PATTERNS),
-    )
-    log_info("Caching and patching host DSOs")
+    cache_content: CacheDirContent = CacheDirContent(paths=[])
+    cache_file_path = os.path.join(cache_dir, "cache.json")
+    cached_ld_library_path = os.path.join(cache_dir, "ld_library_path")
+    paths = get_ld_paths()
+    egl_conf_dir = os.path.join(cache_dir, "egl-confs")
+    nix_gl_ld_library_path: Optional[str] = None
     # Cache/Patch DSOs
-    if not is_dso_cache_up_to_date(dsos, cache_file_path):
+    for path in paths:
+        res = scan_dsos_from_dir(path)
+        if res:
+            cache_content.paths.append(res)
+    if not is_dso_cache_up_to_date(
+        cache_content, cache_file_path
+    ) or not os.path.isfile(cached_ld_library_path):
         log_info("The cache is not up to date, regenerating it")
         shutil.rmtree(cache_dir)
-        os.makedirs(libs_dir, exist_ok=True)
-        os.makedirs(cuda_dir, exist_ok=True)
-        os.makedirs(glx_dir, exist_ok=True)
-        os.makedirs(egl_dir, exist_ok=True)
-        copy_and_patch_libs(list(dsos.generic.values()), libs_dir, libs_dir)
-        copy_and_patch_libs(list(dsos.glx.values()), glx_dir, libs_dir)
-        copy_and_patch_libs(list(dsos.cuda.values()), cuda_dir, libs_dir)
-        log_info("Setting up NVIDIA-specific execution env variables.")
+        cache_paths: List[str] = []
+        for p in cache_content.paths:
+            np = cache_library_path(p, cache_dir)
+            log_info(f"Caching {np}")
+            log_info(f"p {p}")
+            cache_paths.append(cache_library_path(p, cache_dir))
+        log_info(f"Caching ")
         with open(cache_file_path, "w", encoding="utf8") as f:
-            f.write(dsos.to_json())
+            f.write(cache_content.to_json())
+        nix_gl_ld_library_path = generate_cache_ld_library_path(cache_paths)
+        log_info(f"Caching LD_LIBRARY_PATH: {nix_gl_ld_library_path}")
+        with open(cached_ld_library_path, "w", encoding="utf8") as f:
+            f.write(nix_gl_ld_library_path)
+        generate_nvidia_egl_config_files(egl_conf_dir)
     else:
-        log_info("The cache is up to date.")
-    egl_config_files = generate_nvidia_egl_config_files(cache_dir, libs_dir, egl_dir)
+        log_info("The cache is up to date, re-using it.")
+        with open(cached_ld_library_path, "r", encoding="utf8") as f:
+            nix_gl_ld_library_path = f.read()
+
+    assert nix_gl_ld_library_path, "The nix-host-gl LD_LIBRARY_PATH is not set"
+    log_info(f"Injecting LD_LIBRARY_PATH: {nix_gl_ld_library_path}")
+    os.makedirs(egl_conf_dir, exist_ok=True)
     new_env = {}
     log_info(f"__GLX_VENDOR_LIBRARY_NAME = nvidia")
     new_env["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
-    log_info(f"__EGL_VENDOR_LIBRARY_DIRS = {egl_config_files}")
-    new_env["__EGL_VENDOR_LIBRARY_DIRS"] = egl_config_files
+    log_info(f"__EGL_VENDOR_LIBRARY_DIRS = {egl_conf_dir}")
+    new_env["__EGL_VENDOR_LIBRARY_DIRS"] = egl_conf_dir
     ld_library_path = os.environ.get("LD_LIBRARY_PATH", None)
-    nv_ld_library_path = f"{cuda_dir}:{glx_dir}"
     if print_ld_library_path:
-        print(nv_ld_library_path)
+        print(nix_gl_ld_library_path)
     ld_library_path = (
-        nv_ld_library_path
+        nix_gl_ld_library_path
         if ld_library_path is None
-        else f"{nv_ld_library_path}:{ld_library_path}"
+        else f"{nix_gl_ld_library_path}:{ld_library_path}"
     )
     log_info(f"LD_LIBRARY_PATH = {ld_library_path}")
     new_env["LD_LIBRARY_PATH"] = ld_library_path

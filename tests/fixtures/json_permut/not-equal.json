@@ -1,0 +1,75 @@
+{
+  "paths": [
+    {
+      "glx": [
+        {
+          "name": "dummyglx.so",
+          "dirpath": "/lib",
+          "fullpath": "/lib/dummyglx.so",
+          "sha256": "031edd7d41651593c5fe5c006fa5752b37fddff7bc4e843aa6af0c950f4b9406"
+        }
+      ],
+      "cuda": [
+        {
+          "name": "dummycuda.so",
+          "dirpath": "/lib",
+          "fullpath": "/lib/dummycuda.so",
+          "sha256": "031edd7d41651593c5fe5c006fa5752b37fddff7bc4e843aa6af0c950f4b9407"
+        }
+      ],
+      "generic": [
+        {
+          "name": "dummygeneric.so",
+          "dirpath": "/lib",
+          "fullpath": "/lib/dummygeneric.so",
+          "sha256": "031edd7d41651593c5fe5c006fa5752b37fddff7bc4e843aa6af0c950f4b9408"
+        }
+      ],
+      "egl": [
+        {
+          "name": "dummyegl.so",
+          "dirpath": "/lib",
+          "fullpath": "/lib/dummyegl.so",
+          "sha256": "031edd7d41651593c5fe5c006fa5752b37fddff7bc4e843aa6af0c950f4b9409"
+        }
+      ],
+      "path": "/path/to/lib/dir"
+    },
+    {
+      "glx": [
+        {
+          "name": "dummyglx.so",
+          "dirpath": "/lib",
+          "fullpath": "/lib/dummyglx.so",
+          "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+        }
+      ],
+      "cuda": [
+        {
+          "name": "dummycuda.so",
+          "dirpath": "/lib",
+          "fullpath": "/lib/dummycuda.so",
+          "sha256": "131edd7d41651593c5fe5c006fa5752b37fddff7bc4e843aa6af0c950f4b9407"
+        }
+      ],
+      "generic": [
+        {
+          "name": "dummygeneric.so",
+          "dirpath": "/lib",
+          "fullpath": "/lib/dummygeneric.so",
+          "sha256": "131edd7d41651593c5fe5c006fa5752b37fddff7bc4e843aa6af0c950f4b9408"
+        }
+      ],
+      "egl": [
+        {
+          "name": "dummyegl.so",
+          "dirpath": "/lib",
+          "fullpath": "/lib/dummyegl.so",
+          "sha256": "131edd7d41651593c5fe5c006fa5752b37fddff7bc4e843aa6af0c950f4b9409"
+        }
+      ],
+      "path": "/path/to/lib/dir2"
+    }
+  ],
+  "version": 2
+}
