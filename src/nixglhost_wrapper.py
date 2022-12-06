@@ -329,7 +329,9 @@ def is_dso_cache_up_to_date(dsos: HostDSOs, cache_file_path: str) -> bool:
     return False
 
 
-def nvidia_main(cache_dir: str, dso_vendor_paths: List[str]) -> Dict:
+def nvidia_main(
+    cache_dir: str, dso_vendor_paths: List[str], print_ld_library_path: bool = False
+) -> Dict:
     """Prepares the environment necessary to run a opengl/cuda program
     on a Nvidia graphics card. It is by definition really stateful.
 
@@ -404,6 +406,8 @@ def nvidia_main(cache_dir: str, dso_vendor_paths: List[str]) -> Dict:
     new_env["__EGL_VENDOR_LIBRARY_DIRS"] = egl_config_files
     ld_library_path = os.environ.get("LD_LIBRARY_PATH", None)
     nv_ld_library_path = f"{cuda_dir}:{glx_dir}"
+    if print_ld_library_path:
+        print(nv_ld_library_path)
     ld_library_path = (
         nv_ld_library_path
         if ld_library_path is None
@@ -439,10 +443,11 @@ def main(args):
     else:
         log_info("Retrieving DSOs from the load path.")
         host_dsos_paths: List[str] = get_ld_paths()
-    new_env = nvidia_main(cache_dir, host_dsos_paths)
-    os.environ.update(new_env)
+    new_env = nvidia_main(cache_dir, host_dsos_paths, args.print_ld_library_path)
     log_info(f"{time.time() - start_time} seconds elapsed since script start.")
-    exec_binary(args.NIX_BINARY, args.ARGS)
+    if args.NIX_BINARY:
+        os.environ.update(new_env)
+        exec_binary(args.NIX_BINARY, args.ARGS)
     return 0
 
 
@@ -459,16 +464,36 @@ if __name__ == "__main__":
         default=None,
     )
     parser.add_argument(
+        "-p",
+        "--print-ld-library-path",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Print the GL/Cuda LD_LIBRARY_PATH env you should add to your environment.",
+    )
+    parser.add_argument(
         "NIX_BINARY",
         type=str,
+        nargs="?",
         help="Nix-built binary you'd like to wrap.",
+        default=None,
     )
     parser.add_argument(
         "ARGS",
         type=str,
         nargs="*",
         help="The args passed to the wrapped binary.",
+        default=None,
     )
     args = parser.parse_args()
+    if args.print_ld_library_path and args.NIX_BINARY:
+        print(
+            "ERROR: -p and NIX_BINARY are both set. You have to choose between one of these options."
+        )
+        print("       run nixglhost --help for more informations. ")
+        sys.exit(1)
+    elif not args.print_ld_library_path and not args.NIX_BINARY:
+        print("ERROR: Please set the NIX_BINARY you want to run.")
+        print("       run nixglhost --help for more informations. ")
+        sys.exit(1)
     ret = main(args)
     sys.exit(ret)
