@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+import stat
 import sys
 import time
 from glob import glob
@@ -254,7 +255,8 @@ def copy_and_patch_libs(dsos: List[ResolvedLib], libs_dir: str, rpath=None) -> N
         newpath = os.path.join(libs_dir, basename)
         log_info(f"Copying and patching {dso} to {newpath}")
         shutil.copyfile(dso.fullpath, newpath)
-        shutil.copymode(dso.fullpath, newpath)
+        # Provide write permissions to ensure we can patch this binary.
+        os.chmod(newpath, os.stat(dso.fullpath).st_mode | stat.S_IWUSR)
         patch_dso(newpath, rpath)
 
 
