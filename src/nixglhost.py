@@ -172,7 +172,6 @@ class CacheDirContent:
 # requiring to build/fetch the nvidia driver at runtime*.
 # TODO: compile the regexes
 NVIDIA_DSO_PATTERNS = [
-    "libEGL_nvidia\.so.*$",
     "libGLESv1_CM_nvidia\.so.*$",
     "libGLESv2_nvidia\.so.*$",
     "libglxserver_nvidia\.so.*$",
@@ -181,8 +180,6 @@ NVIDIA_DSO_PATTERNS = [
     "libnvidia-cfg\.so.*$",
     "libnvidia-compiler\.so.*$",
     "libnvidia-eglcore\.so.*$",
-    "libnvidia-egl-gbm\.so.*$",
-    "libnvidia-egl-wayland\.so.*$",
     "libnvidia-encode\.so.*$",
     "libnvidia-fbc\.so.*$",
     "libnvidia-glcore\.so.*$",
@@ -320,6 +317,7 @@ def copy_and_patch_libs(
     we first copy them to the user's personal cache directory, we then
     alter their runpath to point to the cache directory."""
     rpath = rpath if (rpath is not None) else dest_dir
+    new_paths: List[str] = []
     for dso in dsos:
         basename = os.path.basename(dso.fullpath)
         newpath = os.path.join(dest_dir, basename)
@@ -327,7 +325,8 @@ def copy_and_patch_libs(
         shutil.copyfile(dso.fullpath, newpath)
         # Provide write permissions to ensure we can patch this binary.
         os.chmod(newpath, os.stat(dso.fullpath).st_mode | stat.S_IWUSR)
-        patch_dso(newpath, rpath)
+        new_paths.append(newpath)
+    patch_dsos(new_paths, rpath)
 
 
 def log_info(string: str) -> None:
@@ -337,14 +336,14 @@ def log_info(string: str) -> None:
         print(f"[+] {string}", file=sys.stderr)
 
 
-def patch_dso(dsoPath: str, rpath: str) -> None:
-    """Call patchelf to change the DSOPATH runpath with RPATH."""
-    log_info(f"Patching {dsoPath}")
-    log_info(f"Exec: {PATCHELF_PATH} --set-rpath {rpath} {dsoPath}")
-    res = subprocess.run([PATCHELF_PATH, "--set-rpath", rpath, dsoPath])
+def patch_dsos(dsoPaths: List[str], rpath: str) -> None:
+    """Call patchelf to change the DSOS runpath with RPATH."""
+    log_info(f"Patching {dsoPaths}")
+    log_info(f"Exec: {PATCHELF_PATH} --set-rpath {rpath} {dsoPaths}")
+    res = subprocess.run([PATCHELF_PATH, "--set-rpath", rpath] + dsoPaths)
     if res.returncode != 0:
         raise BaseException(
-            f"Cannot patch {dsoPath}. Patchelf exited with {res.returncode}"
+            f"Cannot patch {dsoPaths}. Patchelf exited with {res.returncode}"
         )
 
 
@@ -505,9 +504,7 @@ def nvidia_main(
         shutil.rmtree(cache_dir)
         cache_paths: List[str] = []
         for p in cache_content.paths:
-            np = cache_library_path(p, cache_dir)
-            log_info(f"Caching {np}")
-            log_info(f"p {p}")
+            log_info(f"Caching {p}")
             cache_paths.append(cache_library_path(p, cache_dir))
         log_info(f"Caching ")
         with open(cache_file_path, "w", encoding="utf8") as f:
