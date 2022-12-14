@@ -9,18 +9,12 @@ class TestCacheSerializer(unittest.TestCase):
         lp = LibraryPath(
             glx=[
                 ResolvedLib(
-                    "dummyglx.so",
-                    "/lib",
-                    "/lib/dummyglx.so",
-                    "031edd7d41651593c5fe5c006fa5752b37fddff7bc4e843aa6af0c950f4b9406",
+                    "dummyglx.so", "/lib", "/lib/dummyglx.so", 1670260550.481498, 1612
                 )
             ],
             cuda=[
                 ResolvedLib(
-                    "dummycuda.so",
-                    "/lib",
-                    "/lib/dummycuda.so",
-                    "031edd7d41651593c5fe5c006fa5752b37fddff7bc4e843aa6af0c950f4b9407",
+                    "dummycuda.so", "/lib", "/lib/dummycuda.so", 2670260550.481498, 2612
                 )
             ],
             generic=[
@@ -28,15 +22,13 @@ class TestCacheSerializer(unittest.TestCase):
                     "dummygeneric.so",
                     "/lib",
                     "/lib/dummygeneric.so",
-                    "031edd7d41651593c5fe5c006fa5752b37fddff7bc4e843aa6af0c950f4b9408",
+                    3670260550.481498,
+                    3612,
                 )
             ],
             egl=[
                 ResolvedLib(
-                    "dummyegl.so",
-                    "/lib",
-                    "/lib/dummyegl.so",
-                    "031edd7d41651593c5fe5c006fa5752b37fddff7bc4e843aa6af0c950f4b9409",
+                    "dummyegl.so", "/lib", "/lib/dummyegl.so", 4670260550.481498, 4612
                 )
             ],
             path="/path/to/lib/dir",

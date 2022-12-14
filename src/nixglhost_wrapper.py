@@ -14,7 +14,7 @@ from glob import glob
 from typing import List, Literal, Dict, Tuple, TypedDict, TextIO, Optional
 
 IN_NIX_STORE = False
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 
 
 if IN_NIX_STORE:
@@ -30,47 +30,55 @@ class ResolvedLib:
     together with some metadata helping us to uniquely identify it."""
 
     def __init__(
-        self, name: str, dirpath: str, fullpath: str, sha256: Optional[str] = None
+        self,
+        name: str,
+        dirpath: str,
+        fullpath: str,
+        last_modification: Optional[float] = None,
+        size: Optional[int] = None,
     ):
         self.name: str = name
         self.dirpath: str = dirpath
         self.fullpath: str = fullpath
-        if sha256 is None:
-            h = hashlib.sha256()
-            with open(fullpath, "rb") as f:
-                h.update(f.read())
-            sha: str = h.hexdigest()
+        if size is None or last_modification is None:
+            stat = os.stat(fullpath)
+            self.last_modification: float = stat.st_atime
+            self.size: int = stat.st_size
         else:
-            sha = sha256
-        self.sha256: str = sha
+            self.last_modification = last_modification
+            self.size = size
 
     def __repr__(self):
-        return (
-            f"ResolvedLib<{self.name}, {self.dirpath}, {self.fullpath}, {self.sha256}>"
-        )
+        return f"ResolvedLib<{self.name}, {self.dirpath}, {self.fullpath}, {self.last_modification}, {self.size}>"
 
     def to_dict(self) -> Dict:
         return {
             "name": self.name,
             "dirpath": self.dirpath,
             "fullpath": self.fullpath,
-            "sha256": self.sha256,
+            "last_modification": self.last_modification,
+            "size": self.size,
         }
 
     def __hash__(self):
-        return hash((self.name, self.dirpath, self.fullpath, self.sha256))
+        return hash(
+            (self.name, self.dirpath, self.fullpath, self.last_modification, self.size)
+        )
 
     def __eq__(self, o):
         return (
             self.name == o.name
             and self.fullpath == o.fullpath
-            and self.sha256 == o.sha256
             and self.dirpath == o.dirpath
+            and self.last_modification == o.last_modification
+            and self.size == o.size
         )
 
     @classmethod
     def from_dict(cls, d: Dict):
-        return ResolvedLib(d["name"], d["dirpath"], d["fullpath"], d["sha256"])
+        return ResolvedLib(
+            d["name"], d["dirpath"], d["fullpath"], d["last_modification"], d["size"]
+        )
 
 
 class LibraryPath:
@@ -374,8 +382,8 @@ def is_dso_cache_up_to_date(dsos: CacheDirContent, cache_file_path: str) -> bool
 
     We keep what's in the cache through a JSON file stored at the root
     of the cache_dir. We consider a dynamically shared object to be up
-    to date if its name, its full path and its content sha256 are
-    equivalent."""
+    to date if its name, its full path, its size and last modification
+    timestamp are equivalent."""
     log_info("Checking if the cache is up to date")
     if os.path.isfile(cache_file_path):
         with open(cache_file_path, "r", encoding="utf8") as f:
