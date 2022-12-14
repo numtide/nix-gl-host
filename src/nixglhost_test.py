@@ -1,7 +1,7 @@
 import unittest
 import os
 
-from nixglhost_wrapper import CacheDirContent, LibraryPath, ResolvedLib
+from nixglhost import CacheDirContent, LibraryPath, ResolvedLib
 
 
 class TestCacheSerializer(unittest.TestCase):

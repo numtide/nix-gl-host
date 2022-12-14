@@ -578,7 +578,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        prog="nixglhost-wrapper",
+        prog="nixglhost",
         description="Wrapper used to massage the host GL drivers to work with your nix-built binary.",
     )
     parser.add_argument(

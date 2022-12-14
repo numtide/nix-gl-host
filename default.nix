@@ -24,10 +24,10 @@ pkgs.stdenvNoCC.mkDerivation {
   checkPhase = ''
     black --check src/*.py
     nixpkgs-fmt --check *.nix
-    python src/nixglhost_wrapper_test.py
+    python src/nixglhost_test.py
   '';
 
   installPhase = ''
-    install -D -m0755 src/nixglhost_wrapper.py $out/bin/nixglhost
+    install -D -m0755 src/nixglhost.py $out/bin/nixglhost
   '';
 }
