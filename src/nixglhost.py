@@ -42,7 +42,7 @@ class ResolvedLib:
         self.fullpath: str = fullpath
         if size is None or last_modification is None:
             stat = os.stat(fullpath)
-            self.last_modification: float = stat.st_atime
+            self.last_modification: float = stat.st_mtime
             self.size: int = stat.st_size
         else:
             self.last_modification = last_modification
