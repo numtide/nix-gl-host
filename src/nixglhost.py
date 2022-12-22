@@ -108,6 +108,9 @@ class LibraryPath:
             and self.path == other.path
         )
 
+    def __repr__(self):
+        return f"LibraryPath<{self.path}>"
+
     def __hash__(self):
         return hash(
             (
@@ -436,7 +439,10 @@ def cache_library_path(library_path: LibraryPath, cache_dir_root: str) -> str:
         (library_path.glx, glx_dir),
     ]:
         os.makedirs(d, exist_ok=True)
-        copy_and_patch_libs(dsos=dsos, dest_dir=d, rpath=lib_dir)
+        if len(dsos) > 0:
+            copy_and_patch_libs(dsos=dsos, dest_dir=d, rpath=lib_dir)
+        else:
+            log_info(f"Did not find any DSO to put in {d}, skipping copy and patching.")
     return cache_path_root
 
 
