@@ -19,8 +19,6 @@
     {
       defaultPackage = forAllSystems (system: import ./default.nix { pkgs = pkgs system; });
 
-      overlays.default = import ./overlays/nixpkgs.nix;
-
       legacyPackages = forAllSystems (system: (pkgs system));
 
       devShell = forAllSystems (system:
