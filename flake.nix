@@ -13,7 +13,6 @@
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
       pkgs = system: import nixpkgs {
         inherit system;
-        overlays = [ self.overlays.default ];
       };
     in
     {
