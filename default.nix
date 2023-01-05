@@ -30,4 +30,6 @@ pkgs.stdenvNoCC.mkDerivation {
   installPhase = ''
     install -D -m0755 src/nixglhost.py $out/bin/nixglhost
   '';
+
+  meta.mainProgram = "nixglhost";
 }
