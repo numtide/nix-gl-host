@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
 import re
 import shutil
-import subprocess
 import stat
+import subprocess
 import sys
+import tempfile
 import time
 from glob import glob
 from typing import List, Literal, Dict, Tuple, TypedDict, TextIO, Optional
@@ -412,7 +414,9 @@ def scan_dsos_from_dir(path: str) -> Optional[LibraryPath]:
         return None
 
 
-def cache_library_path(library_path: LibraryPath, cache_dir_root: str) -> str:
+def cache_library_path(
+    library_path: LibraryPath, temp_cache_dir_root: str, final_cache_dir_root: str
+) -> str:
     """Generate a cache directory for the LIBRARY_PATH host directory.
 
     This cache directory is mirroring the host directory containing
@@ -426,8 +430,9 @@ def cache_library_path(library_path: LibraryPath, cache_dir_root: str) -> str:
     h.update(library_path.path.encode("utf8"))
     path_hash: str = h.hexdigest()
     # Paths
-    cache_path_root: str = os.path.join(cache_dir_root, path_hash)
+    cache_path_root: str = os.path.join(temp_cache_dir_root, path_hash)
     lib_dir = os.path.join(cache_path_root, "lib")
+    rpath_lib_dir = os.path.join(final_cache_dir_root, path_hash, "lib")
     cuda_dir = os.path.join(cache_path_root, "cuda")
     egl_dir = os.path.join(cache_path_root, "egl")
     glx_dir = os.path.join(cache_path_root, "glx")
@@ -440,7 +445,7 @@ def cache_library_path(library_path: LibraryPath, cache_dir_root: str) -> str:
     ]:
         os.makedirs(d, exist_ok=True)
         if len(dsos) > 0:
-            copy_and_patch_libs(dsos=dsos, dest_dir=d, rpath=lib_dir)
+            copy_and_patch_libs(dsos=dsos, dest_dir=d, rpath=rpath_lib_dir)
         else:
             log_info(f"Did not find any DSO to put in {d}, skipping copy and patching.")
     return path_hash
@@ -520,33 +525,60 @@ def nvidia_main(
     log_info("Searching for the host DSOs")
     cache_content: CacheDirContent = CacheDirContent(paths=[])
     cache_file_path = os.path.join(cache_dir, "cache.json")
+    lock_path = os.path.join(os.path.split(cache_dir)[0], "nix-gl-host.lock")
     cached_ld_library_path = os.path.join(cache_dir, "ld_library_path")
     paths = get_ld_paths()
     egl_conf_dir = os.path.join(cache_dir, "egl-confs")
     nix_gl_ld_library_path: Optional[str] = None
     # Cache/Patch DSOs
-    # TODO: extract
-    for path in paths:
-        res = scan_dsos_from_dir(path)
-        if res:
-            cache_content.paths.append(res)
-    if not is_dso_cache_up_to_date(
-        cache_content, cache_file_path
-    ) or not os.path.isfile(cached_ld_library_path):
-        log_info("The cache is not up to date, regenerating it")
-        shutil.rmtree(cache_dir)
-        cache_paths: List[str] = []
-        for p in cache_content.paths:
-            log_info(f"Caching {p}")
-            cache_paths.append(cache_library_path(p, cache_dir))
-        cache_absolute_paths = [os.path.join(cache_dir, p) for p in cache_paths]
-        nix_gl_ld_library_path = generate_cache_metadata(
-            cache_dir, cache_content, cache_absolute_paths
-        )
-    else:
-        log_info("The cache is up to date, re-using it.")
-        with open(cached_ld_library_path, "r", encoding="utf8") as f:
-            nix_gl_ld_library_path = f.read()
+    #
+    # We need to be super careful about race conditions here. We're
+    # using a file lock to make sure only one nix-gl-host instance can
+    # access the cache at a time.
+    #
+    # If the cache is locked, we'll wait until the said lock is
+    # released. The lock will always be released when the lock FD get
+    # closed, IE. when we'll get out of this block.
+    with open(lock_path, "w") as lock:
+        log_info("Acquiring the cache lock")
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        log_info("Cache lock acquired")
+        for path in paths:
+            res = scan_dsos_from_dir(path)
+            if res:
+                cache_content.paths.append(res)
+        if not is_dso_cache_up_to_date(
+            cache_content, cache_file_path
+        ) or not os.path.isfile(cached_ld_library_path):
+            log_info("The cache is not up to date, regenerating it")
+            # We're building first the cache in a temporary directory
+            # to make sure we won't end up with a partially
+            # populated/corrupted nix-gl-host cache.
+            with tempfile.TemporaryDirectory() as tmp_cache:
+                tmp_cache_dir = os.path.join(tmp_cache, "nix-gl-host")
+                os.makedirs(tmp_cache_dir)
+                cache_paths: List[str] = []
+                for p in cache_content.paths:
+                    log_info(f"Caching {p}")
+                    cache_paths.append(cache_library_path(p, tmp_cache_dir, cache_dir))
+                # Pointing the LD_LIBRARY_PATH to the final destination
+                # instead of the tmp dir.
+                cache_absolute_paths = [os.path.join(cache_dir, p) for p in cache_paths]
+                nix_gl_ld_library_path = generate_cache_metadata(
+                    tmp_cache_dir, cache_content, cache_absolute_paths
+                )
+                # The temporary cache has been successfully populated,
+                # let's mv it to the actual nix-gl-host cache.
+                # Note: The move operation is atomic on linux.
+                log_info(f"Mv {tmp_cache_dir} to {cache_dir}")
+                if os.path.exists(cache_dir):
+                    shutil.rmtree(cache_dir)
+                shutil.move(tmp_cache_dir, os.path.split(cache_dir)[0])
+        else:
+            log_info("The cache is up to date, re-using it.")
+            with open(cached_ld_library_path, "r", encoding="utf8") as f:
+                nix_gl_ld_library_path = f.read()
+    log_info("Cache lock released")
 
     assert nix_gl_ld_library_path, "The nix-host-gl LD_LIBRARY_PATH is not set"
     log_info(f"Injecting LD_LIBRARY_PATH: {nix_gl_ld_library_path}")
@@ -583,8 +615,8 @@ def main(args):
     home = os.path.expanduser("~")
     xdg_cache_home = os.environ.get("XDG_CACHE_HOME", os.path.join(home, ".cache"))
     cache_dir = os.path.join(xdg_cache_home, "nix-gl-host")
-    log_info(f'Using "{cache_dir}" as cache dir.')
     os.makedirs(cache_dir, exist_ok=True)
+    log_info(f'Using "{cache_dir}" as cache dir.')
     if args.driver_directory:
         log_info(
             f"Retreiving DSOs from the specified directory: {args.driver_directory}"
