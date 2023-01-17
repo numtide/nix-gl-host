@@ -419,8 +419,8 @@ def cache_library_path(library_path: LibraryPath, cache_dir_root: str) -> str:
     the graphics card drivers. Its full name is hashed: it's an
     attempt to keep the final LD_LIBRARY_PATH reasonably sized.
 
-    Returns the full path of the cache directory created by this
-    function."""
+    Returns the name of the cache directory created by this
+    function to CACHE_DIR_ROOT."""
     # Hash Computation
     h = hashlib.sha256()
     h.update(library_path.path.encode("utf8"))
@@ -443,7 +443,7 @@ def cache_library_path(library_path: LibraryPath, cache_dir_root: str) -> str:
             copy_and_patch_libs(dsos=dsos, dest_dir=d, rpath=lib_dir)
         else:
             log_info(f"Did not find any DSO to put in {d}, skipping copy and patching.")
-    return cache_path_root
+    return path_hash
 
 
 def generate_cache_ld_library_path(cache_paths: List[str]) -> str:
@@ -461,6 +461,32 @@ def generate_cache_ld_library_path(cache_paths: List[str]) -> str:
             f"{path}/egl",
         ]
     return ":".join(ld_library_paths)
+
+
+def generate_cache_metadata(
+    cache_dir: str, cache_content: CacheDirContent, cache_paths: List[str]
+) -> str:
+    """Generates the various cache metadata for a given CACHE_CONTENT
+    and CACHE_PATHS in CACHE_DIR. Return the associated LD_LIBRARY_PATH.
+
+    The metadata being:
+
+    - CACHE_DIR/cache.json: json file containing all the paths info.
+    - CACHE_DIR/ld_library_path: file containing the LD_LIBRARY_PATH
+      to inject for the CACHE_PATHS.
+    - CACHE_DIR/egl-confs: directory containing the various EGL
+      confs."""
+    cache_file_path = os.path.join(cache_dir, "cache.json")
+    cached_ld_library_path = os.path.join(cache_dir, "ld_library_path")
+    egl_conf_dir = os.path.join(cache_dir, "egl-confs")
+    with open(cache_file_path, "w", encoding="utf8") as f:
+        f.write(cache_content.to_json())
+    nix_gl_ld_library_path = generate_cache_ld_library_path(cache_paths)
+    log_info(f"Caching LD_LIBRARY_PATH: {nix_gl_ld_library_path}")
+    with open(cached_ld_library_path, "w", encoding="utf8") as f:
+        f.write(nix_gl_ld_library_path)
+    generate_nvidia_egl_config_files(egl_conf_dir)
+    return nix_gl_ld_library_path
 
 
 def nvidia_main(
@@ -499,6 +525,7 @@ def nvidia_main(
     egl_conf_dir = os.path.join(cache_dir, "egl-confs")
     nix_gl_ld_library_path: Optional[str] = None
     # Cache/Patch DSOs
+    # TODO: extract
     for path in paths:
         res = scan_dsos_from_dir(path)
         if res:
@@ -512,14 +539,10 @@ def nvidia_main(
         for p in cache_content.paths:
             log_info(f"Caching {p}")
             cache_paths.append(cache_library_path(p, cache_dir))
-        log_info(f"Caching ")
-        with open(cache_file_path, "w", encoding="utf8") as f:
-            f.write(cache_content.to_json())
-        nix_gl_ld_library_path = generate_cache_ld_library_path(cache_paths)
-        log_info(f"Caching LD_LIBRARY_PATH: {nix_gl_ld_library_path}")
-        with open(cached_ld_library_path, "w", encoding="utf8") as f:
-            f.write(nix_gl_ld_library_path)
-        generate_nvidia_egl_config_files(egl_conf_dir)
+        cache_absolute_paths = [os.path.join(cache_dir, p) for p in cache_paths]
+        nix_gl_ld_library_path = generate_cache_metadata(
+            cache_dir, cache_content, cache_absolute_paths
+        )
     else:
         log_info("The cache is up to date, re-using it.")
         with open(cached_ld_library_path, "r", encoding="utf8") as f:
@@ -527,7 +550,6 @@ def nvidia_main(
 
     assert nix_gl_ld_library_path, "The nix-host-gl LD_LIBRARY_PATH is not set"
     log_info(f"Injecting LD_LIBRARY_PATH: {nix_gl_ld_library_path}")
-    os.makedirs(egl_conf_dir, exist_ok=True)
     new_env = {}
     log_info(f"__GLX_VENDOR_LIBRARY_NAME = nvidia")
     new_env["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
