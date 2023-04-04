@@ -4,7 +4,7 @@ use clap::Parser;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
-struct CLI {
+struct Cli {
     ///Use the driver libraries contained in this directory instead of discovering them from the load path.
     #[arg(short, long)]
     driver_directory: Option<String>,
@@ -38,12 +38,16 @@ struct ResolvedLib {
 /// GPU dynamic libraries.
 struct HostLibraryPath {
     fullpath: PathBuf,
+
     /// GLX-related libraries contained in this library path entry.
     glx: Vec<ResolvedLib>,
+
     /// EGL-related libraries contained in this library path entry.
     egl: Vec<ResolvedLib>,
+
     /// Cuda-related libraries contained in this library path entry.
     cuda: Vec<ResolvedLib>,
+
     /// Generic/helper libraries contained in this library path entry.
     generic: Vec<ResolvedLib>,
 }
@@ -58,5 +62,5 @@ struct CacheDirContent {
 }
 
 fn main() {
-    let _cli_args = CLI::parse();
+    let _cli_args = Cli::parse();
 }

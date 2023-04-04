@@ -5,5 +5,6 @@ pkgs.mkShell {
     pkgs.cargo
     pkgs.rustc
     pkgs.rust-analyzer
+    pkgs.clippy
   ];
 }
