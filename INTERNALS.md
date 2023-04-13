@@ -1,7 +1,5 @@
 # NixGlHost Internals
 
-Document idea: technical documentation. Explaining what we're doing and why.
-
 ### TL;DR: How Does it Work?
 
 Nix-gl-host's sole goal is to massage your system graphic driver in order to re-use it in your nix-built OpenGL/Cuda programs.
@@ -61,9 +59,7 @@ Where:
 
 ### Design Limitations
 
-TODO
-
-### DSOs conflict
+#### DSOs conflict
 
 NixGLHost injects some host DSOs into Nix closures. Even though we're trying to limit the blast radius as much as possible with the runpath trick described in the previous section, if the program also uses some of the DSOs previously injected, we could end up running into some ABI incompatibilities.
 
