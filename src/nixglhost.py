@@ -561,12 +561,6 @@ def nvidia_main(
                 for p in cache_content.paths:
                     log_info(f"Caching {p}")
                     cache_paths.append(cache_library_path(p, tmp_cache_dir, cache_dir))
-                # Pointing the LD_LIBRARY_PATH to the final destination
-                # instead of the tmp dir.
-                cache_absolute_paths = [os.path.join(cache_dir, p) for p in cache_paths]
-                nix_gl_ld_library_path = generate_cache_metadata(
-                    tmp_cache_dir, cache_content, cache_absolute_paths
-                )
                 # The temporary cache has been successfully populated,
                 # let's mv it to the actual nix-gl-host cache.
                 # Note: The move operation is atomic on linux.
@@ -574,6 +568,12 @@ def nvidia_main(
                 if os.path.exists(cache_dir):
                     shutil.rmtree(cache_dir)
                 shutil.move(tmp_cache_dir, os.path.split(cache_dir)[0])
+                # Pointing the LD_LIBRARY_PATH to the final destination
+                # instead of the tmp dir.
+                cache_absolute_paths = [os.path.join(cache_dir, p) for p in cache_paths]
+                nix_gl_ld_library_path = generate_cache_metadata(
+                    tmp_cache_dir, cache_content, cache_absolute_paths
+                )
         else:
             log_info("The cache is up to date, re-using it.")
             with open(cached_ld_library_path, "r", encoding="utf8") as f:
