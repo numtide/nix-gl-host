@@ -56,8 +56,22 @@ This means that you should always prefer wrapping the dependencies to a single b
 
 ## With Flakes
 
+The `nixglhost` wrapper is exposed through the flake `defaultPackage` output.
 
-## Without Flakes, Through nix-shell (shell.nix)
+```nix
+{
+  description = "…";
+
+  inputs = {
+    nix-gl-host.url = "github:numtide/nix-gl-host";
+  };
+
+  outputs = { self, nixpkgs, nix-gl-host }: {
+    packages.x86_64-linux.nix-gl-host = nix-gl-host.defaultPackage.x86_64-linux;
+  };
+}
+```
+
 ## Without Flakes (nix-shell)
 
 This project's `default.nix` is a derivation you can easily `callPackage`, Nixpkgs-style. You can get the `nixglhost` wrapper through the following `shell.nix`:
