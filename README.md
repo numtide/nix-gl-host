@@ -52,9 +52,54 @@ It exists and is documented because you may not have any other options in some s
 
 This means that you should always prefer wrapping the dependencies to a single binary rather than globally exporting them to the global execution environment.
 
+# Installation
+
+## With Flakes
+
+The `nixglhost` wrapper is exposed through the flake `defaultPackage` output.
+
+```nix
+{
+  description = "…";
+
+  inputs = {
+    nix-gl-host.url = "github:numtide/nix-gl-host";
+  };
+
+  outputs = { self, nixpkgs, nix-gl-host }: {
+    packages.x86_64-linux.nix-gl-host = nix-gl-host.defaultPackage.x86_64-linux;
+  };
+}
+```
+
+## Without Flakes (nix-shell)
+
+This project's `default.nix` is a derivation you can easily `callPackage`, Nixpkgs-style. You can get the `nixglhost` wrapper through the following `shell.nix`:
+
+``` nix
+{ pkgs ? import <nixpkgs> { }, lib ? pkgs.lib }:
+
+let
+  nixglhost-sources = pkgs.fetchFromGitHub {
+    owner = "numtide";
+    repo = "nix-gl-host";
+    rev = "main";
+    # Replace this with the hash Nix will complain about, TOFU style.
+    hash = "";
+  };
+
+  nixglhost = pkgs.callPackage "${nixglhost-sources}/default.nix" { };
+
+in pkgs.mkShell {
+  buildInputs = [
+    nixglhost
+  ];
+}
+```
+
 # State of the project
 
-We want to work with the community to integrate this work upstream. The current version demonstrates that solving this problem is possible but before adding more platforms to it, we believe that it would be good to 
+We want to work with the community to integrate this work upstream. The current version demonstrates that solving this problem is possible but before adding more platforms to it, we believe that it would be good to
 
 ## Support Matrix
 
