@@ -372,7 +372,7 @@ def generate_nvidia_egl_config_files(egl_conf_dir: str) -> None:
         ("15_nvidia_gbm.json", f"libnvidia-egl-gbm.so.1"),
     ]
 
-    for (conf_file_name, dso_name) in dso_paths:
+    for conf_file_name, dso_name in dso_paths:
         os.makedirs(egl_conf_dir, exist_ok=True)
         with open(
             os.path.join(egl_conf_dir, conf_file_name), "w", encoding="utf-8"
