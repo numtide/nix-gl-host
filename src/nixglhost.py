@@ -190,6 +190,7 @@ NVIDIA_DSO_PATTERNS = [
     "libnvidia-glcore\.so.*$",
     "libnvidia-glsi\.so.*$",
     "libnvidia-glvkspirv\.so.*$",
+    "libnvidia-gpucomp\.so.*$",
     "libnvidia-ml\.so.*$",
     "libnvidia-ngx\.so.*$",
     "libnvidia-nvvm\.so.*$",
