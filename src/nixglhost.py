@@ -540,7 +540,7 @@ def nvidia_main(
     cache_file_path = os.path.join(cache_dir, "cache.json")
     lock_path = os.path.join(os.path.split(cache_dir)[0], "nix-gl-host.lock")
     cached_ld_library_path = os.path.join(cache_dir, "ld_library_path")
-    paths = get_ld_paths()
+    paths = list(dso_vendor_paths)
     egl_conf_dir = os.path.join(cache_dir, "egl-confs")
     nix_gl_ld_library_path: Optional[str] = None
     # Cache/Patch DSOs
