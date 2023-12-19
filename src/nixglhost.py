@@ -23,8 +23,10 @@ if IN_NIX_STORE:
     # The following paths are meant to be substituted by Nix at build
     # time.
     PATCHELF_PATH = "@patchelf-bin@"
+    APPEND_RUNPATHS: List[str] = json.loads("""@append-runpaths@""")
 else:
     PATCHELF_PATH = "patchelf"
+    APPEND_RUNPATHS: List[str] = []
 
 
 class ResolvedLib:
@@ -445,7 +447,9 @@ def cache_library_path(
     # Paths
     cache_path_root: str = os.path.join(temp_cache_dir_root, path_hash)
     lib_dir = os.path.join(cache_path_root, "lib")
-    rpath_lib_dir = os.path.join(final_cache_dir_root, path_hash, "lib")
+    rpath_lib_dir = ":".join(
+        [os.path.join(final_cache_dir_root, path_hash, "lib")] + APPEND_RUNPATHS
+    )
     cuda_dir = os.path.join(cache_path_root, "cuda")
     egl_dir = os.path.join(cache_path_root, "egl")
     glx_dir = os.path.join(cache_path_root, "glx")
