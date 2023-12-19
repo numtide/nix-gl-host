@@ -634,7 +634,7 @@ def main(args):
         log_info(
             f"Retreiving DSOs from the specified directory: {args.driver_directory}"
         )
-        host_dsos_paths: List[str] = [args.driver_directory]
+        host_dsos_paths: List[str] = args.driver_directory
     else:
         log_info("Retrieving DSOs from the load path.")
         host_dsos_paths: List[str] = get_ld_paths()
@@ -654,6 +654,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-d",
         "--driver-directory",
+        action="append",
         type=str,
         help="Use the driver libraries contained in this directory instead of discovering them from the load path.",
         default=None,
