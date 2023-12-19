@@ -225,7 +225,19 @@ NVIDIA_DSO_PATTERNS = [
     r"libwayland-client\.so.*$",
 ]
 
-CUDA_DSO_PATTERNS = ["libcudadebugger\.so.*$", "libcuda\.so.*$"]
+CUDA_DSO_PATTERNS = [
+    r"libcudadebugger\.so.*$",
+    r"libcuda\.so.*$",
+    r"libnvcucompat.so",
+    r"libnvos\.so.*$",
+    r"libnvrm_chip\.so.*$",
+    r"libnvrm_gpu\.so.*$",
+    r"libnvrm_host1x\.so.*$",
+    r"libnvrm_mem\.so.*$",
+    r"libnvrm_sync\.so.*$",
+    r"libnvsciipc\.so.*$",
+    r"libnvsocsys\.so.*$",
+]
 
 GLX_DSO_PATTERNS = ["libGLX_nvidia\.so.*$"]
 
