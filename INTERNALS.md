@@ -22,7 +22,7 @@ Opengl, Cuda, and OpenCV are annoying cases though. The runtime closure has to d
 
 To add some more chaos to this sorry state, the "top-level" graphic driver DSOs (the ones dynamically linked against the user application) are themselves depending on some other DSOS. Some are vendor-specific, some are more generic, such as `libpthread`, `libffi`, `libexpat`, etc...
 
-We don't want to inject all these dependencies directly to the `LD_LIBRARY_PATH`: we'd be potentially creating some ABI incompatibilities. So instead, we only inject the "top-level" libraries and rewrite their runpath ELF sections to point to thea directory containing the dependencies. That way, the "top-level" DSOs can find their dependencies in their library path, while the wrapped program  ends up only with the "top-level" dependencies in its library path.
+We don't want to inject all these dependencies directly to the `LD_LIBRARY_PATH`: we'd be potentially creating some ABI incompatibilities. So instead, we only inject the "top-level" libraries and rewrite their runpath ELF sections to point to the directory containing the dependencies. That way, the "top-level" DSOs can find their dependencies in their library path, while the wrapped program  ends up only with the "top-level" dependencies in its library path.
 
 You get the idea. This concept seems dodgy at first, and it is to some extent! However, in practice, we haven't not run into any ABI incompatibilities issues so far.
 
