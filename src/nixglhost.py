@@ -474,6 +474,7 @@ def generate_cache_ld_library_path(cache_paths: List[str]) -> str:
     ld_library_paths: List[str] = []
     for path in cache_paths:
         ld_library_paths = ld_library_paths + [
+            f"{path}/lib",
             f"{path}/glx",
             f"{path}/cuda",
             f"{path}/egl",
