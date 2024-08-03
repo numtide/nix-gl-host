@@ -223,6 +223,10 @@ NVIDIA_DSO_PATTERNS = [
     # libwayland
     "libwayland-server\.so.*$",
     "libwayland-client\.so.*$",
+    # WSL specific
+    "libd3d12core\.so.*$",
+    "libd3d12\.so.*$",
+    "libdxcore\.so.*$",
 ]
 
 CUDA_DSO_PATTERNS = ["libcudadebugger\.so.*$", "libcuda\.so.*$"]
