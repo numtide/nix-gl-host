@@ -23,8 +23,10 @@ if IN_NIX_STORE:
     # The following paths are meant to be substituted by Nix at build
     # time.
     PATCHELF_PATH = "@patchelf-bin@"
+    APPEND_RUNPATHS: List[str] = json.loads("""@append-runpaths@""")
 else:
     PATCHELF_PATH = "patchelf"
+    APPEND_RUNPATHS: List[str] = []
 
 
 class ResolvedLib:
@@ -177,55 +179,67 @@ class CacheDirContent:
 # requiring to build/fetch the nvidia driver at runtime*.
 # TODO: compile the regexes
 NVIDIA_DSO_PATTERNS = [
-    "libGLESv1_CM_nvidia\.so.*$",
-    "libGLESv2_nvidia\.so.*$",
-    "libglxserver_nvidia\.so.*$",
-    "libnvcuvid\.so.*$",
-    "libnvidia-allocator\.so.*$",
-    "libnvidia-cfg\.so.*$",
-    "libnvidia-compiler\.so.*$",
-    "libnvidia-eglcore\.so.*$",
-    "libnvidia-encode\.so.*$",
-    "libnvidia-fbc\.so.*$",
-    "libnvidia-glcore\.so.*$",
-    "libnvidia-glsi\.so.*$",
-    "libnvidia-glvkspirv\.so.*$",
-    "libnvidia-gpucomp\.so.*$",
-    "libnvidia-ml\.so.*$",
-    "libnvidia-ngx\.so.*$",
-    "libnvidia-nvvm\.so.*$",
-    "libnvidia-opencl\.so.*$",
-    "libnvidia-opticalflow\.so.*$",
-    "libnvidia-ptxjitcompiler\.so.*$",
-    "libnvidia-rtcore\.so.*$",
-    "libnvidia-tls\.so.*$",
-    "libnvidia-vulkan-producer\.so.*$",
-    "libnvidia-wayland-client\.so.*$",
-    "libnvoptix\.so.*$",
+    r"libGLESv1_CM_nvidia\.so.*$",
+    r"libGLESv2_nvidia\.so.*$",
+    r"libglxserver_nvidia\.so.*$",
+    r"libnvcuvid\.so.*$",
+    r"libnvidia-allocator\.so.*$",
+    r"libnvidia-cfg\.so.*$",
+    r"libnvidia-compiler\.so.*$",
+    r"libnvidia-eglcore\.so.*$",
+    r"libnvidia-encode\.so.*$",
+    r"libnvidia-fbc\.so.*$",
+    r"libnvidia-glcore\.so.*$",
+    r"libnvidia-glsi\.so.*$",
+    r"libnvidia-glvkspirv\.so.*$",
+    r"libnvidia-gpucomp\.so.*$",
+    r"libnvidia-ml\.so.*$",
+    r"libnvidia-ngx\.so.*$",
+    r"libnvidia-nvvm\.so.*$",
+    r"libnvidia-opencl\.so.*$",
+    r"libnvidia-opticalflow\.so.*$",
+    r"libnvidia-ptxjitcompiler\.so.*$",
+    r"libnvidia-rtcore\.so.*$",
+    r"libnvidia-tls\.so.*$",
+    r"libnvidia-vulkan-producer\.so.*$",
+    r"libnvidia-wayland-client\.so.*$",
+    r"libnvoptix\.so.*$",
     # Cannot find that one :(
-    "libnvtegrahv\.so.*$",
+    r"libnvtegrahv\.so.*$",
     # Host dependencies required by the nvidia DSOs to properly
     # operate
     # libdrm
-    "libdrm\.so.*$",
+    r"libdrm\.so.*$",
     # libffi
-    "libffi\.so.*$",
+    r"libffi\.so.*$",
     # libgbm
-    "libgbm\.so.*$",
+    r"libgbm\.so.*$",
     # libexpat
-    "libexpat\.so.*$",
+    r"libexpat\.so.*$",
     # libxcb
-    "libxcb-glx\.so.*$",
+    r"libxcb-glx\.so.*$",
     # Coming from libx11
-    "libX11-xcb\.so.*$",
-    "libX11\.so.*$",
-    "libXext\.so.*$",
+    r"libX11-xcb\.so.*$",
+    r"libX11\.so.*$",
+    r"libXext\.so.*$",
     # libwayland
-    "libwayland-server\.so.*$",
-    "libwayland-client\.so.*$",
+    r"libwayland-server\.so.*$",
+    r"libwayland-client\.so.*$",
 ]
 
-CUDA_DSO_PATTERNS = ["libcudadebugger\.so.*$", "libcuda\.so.*$"]
+CUDA_DSO_PATTERNS = [
+    r"libcudadebugger\.so.*$",
+    r"libcuda\.so.*$",
+    r"libnvcucompat.so",
+    r"libnvos\.so.*$",
+    r"libnvrm_chip\.so.*$",
+    r"libnvrm_gpu\.so.*$",
+    r"libnvrm_host1x\.so.*$",
+    r"libnvrm_mem\.so.*$",
+    r"libnvrm_sync\.so.*$",
+    r"libnvsciipc\.so.*$",
+    r"libnvsocsys\.so.*$",
+]
 
 GLX_DSO_PATTERNS = ["libGLX_nvidia\.so.*$"]
 
@@ -436,7 +450,9 @@ def cache_library_path(
     # Paths
     cache_path_root: str = os.path.join(temp_cache_dir_root, path_hash)
     lib_dir = os.path.join(cache_path_root, "lib")
-    rpath_lib_dir = os.path.join(final_cache_dir_root, path_hash, "lib")
+    rpath_lib_dir = ":".join(
+        [os.path.join(final_cache_dir_root, path_hash, "lib")] + APPEND_RUNPATHS
+    )
     cuda_dir = os.path.join(cache_path_root, "cuda")
     egl_dir = os.path.join(cache_path_root, "egl")
     glx_dir = os.path.join(cache_path_root, "glx")
@@ -531,7 +547,7 @@ def nvidia_main(
     cache_file_path = os.path.join(cache_dir, "cache.json")
     lock_path = os.path.join(os.path.split(cache_dir)[0], "nix-gl-host.lock")
     cached_ld_library_path = os.path.join(cache_dir, "ld_library_path")
-    paths = get_ld_paths()
+    paths = list(dso_vendor_paths)
     egl_conf_dir = os.path.join(cache_dir, "egl-confs")
     nix_gl_ld_library_path: Optional[str] = None
     # Cache/Patch DSOs
@@ -625,7 +641,7 @@ def main(args):
         log_info(
             f"Retreiving DSOs from the specified directory: {args.driver_directory}"
         )
-        host_dsos_paths: List[str] = [args.driver_directory]
+        host_dsos_paths: List[str] = args.driver_directory
     else:
         log_info("Retrieving DSOs from the load path.")
         host_dsos_paths: List[str] = get_ld_paths()
@@ -645,6 +661,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-d",
         "--driver-directory",
+        action="append",
         type=str,
         help="Use the driver libraries contained in this directory instead of discovering them from the load path.",
         default=None,
