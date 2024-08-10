@@ -15,8 +15,9 @@
     {
       packages = eachSystem (pkgs: {
         default = import ./. { inherit pkgs; };
-        defaultPackage = import ./. { inherit pkgs; };
       });
+
+      defaultPackage = eachSystem (pkgs: self.packages.${pkgs.system}.default);
 
       devShell = eachSystem (pkgs:
         pkgs.callPackage ./shell.nix { }
