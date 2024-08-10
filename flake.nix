@@ -15,6 +15,7 @@
     {
       packages = eachSystem (pkgs: {
         default = import ./. { inherit pkgs; };
+        defaultPackage = import ./. { inherit pkgs; };
       });
 
       devShell = eachSystem (pkgs:
