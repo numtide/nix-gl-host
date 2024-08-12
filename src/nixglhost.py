@@ -665,8 +665,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "ARGS",
-        type=str,
-        nargs="*",
+        nargs=argparse.REMAINDER,
         help="The args passed to the wrapped binary.",
         default=None,
     )
