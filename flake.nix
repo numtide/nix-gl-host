@@ -23,6 +23,10 @@
         pkgs.callPackage ./shell.nix { }
       );
 
+      overlays.default = final: _: {
+        nix-gl-host = final.callPackage ./default.nix { };
+      };
+
       formatter = eachSystem (pkgs: pkgs.nixpkgs-fmt);
 
       checks = self.packages;
