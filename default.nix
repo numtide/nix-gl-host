@@ -1,4 +1,4 @@
-{ pkgs ? import <nixpkgs> { }, lib ? pkgs.lib }:
+{ pkgs ? import <nixpkgs> { }, lib ? pkgs.lib, appendRunpaths ? [ pkgs.stdenv.cc.libc pkgs.stdenv.cc.cc.lib ] }:
 
 pkgs.stdenvNoCC.mkDerivation {
   pname = "nix-gl-host";
@@ -12,9 +12,11 @@ pkgs.stdenvNoCC.mkDerivation {
     pkgs.nixpkgs-fmt
   ];
 
+  appendRunpaths = builtins.toJSON (map (x: "${lib.getLib x}/lib") appendRunpaths);
   postFixup = ''
     substituteInPlace $out/bin/nixglhost \
         --replace "@patchelf-bin@" "${pkgs.patchelf}/bin/patchelf" \
+        --replace "@append-runpaths@" "$appendRunpaths" \
         --replace "IN_NIX_STORE = False" "IN_NIX_STORE = True"
     patchShebangs $out/bin/nixglhost
   '';
