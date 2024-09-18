@@ -302,12 +302,15 @@ def resolve_libraries(path: str, files_patterns: List[str]) -> List[ResolvedLib]
                 return True
         return False
 
-    for fname in os.listdir(path):
-        abs_file_path = os.path.abspath(os.path.join(path, fname))
-        if os.path.isfile(abs_file_path) and is_dso_matching_pattern(abs_file_path):
-            libraries.append(
-                ResolvedLib(name=fname, dirpath=path, fullpath=abs_file_path)
-            )
+    try:
+        for fname in os.listdir(path):
+            abs_file_path = os.path.abspath(os.path.join(path, fname))
+            if os.path.isfile(abs_file_path) and is_dso_matching_pattern(abs_file_path):
+                libraries.append(
+                    ResolvedLib(name=fname, dirpath=path, fullpath=abs_file_path)
+                )
+    except PermissionError as err:
+        print(f"WARNING: {err}", file=sys.stderr)
     return libraries
 
 
