@@ -272,12 +272,15 @@ def get_ld_paths() -> List[str]:
     if os.path.exists("/etc/ld.so.conf"):
         paths.extend(parse_ld_conf_file("/etc/ld.so.conf"))
     else:
-        print('WARNING: file "/etc/ld.so.conf" not found.')
+        print('WARNING: file "/etc/ld.so.conf" not found.', file=sys.stderr)
     if PREFIX:
         if os.path.exists(PREFIX + "/etc/ld.so.conf"):
             paths.extend(parse_ld_conf_file(PREFIX + "/etc/ld.so.conf"))
         else:
-            print('WARNING: file "' + PREFIX + '/etc/ld.so.conf" not found.')
+            print(
+                'WARNING: file "' + PREFIX + '/etc/ld.so.conf" not found.',
+                file=sys.stderr,
+            )
         paths.extend(
             [
                 PREFIX + "/lib",
@@ -303,12 +306,15 @@ def resolve_libraries(path: str, files_patterns: List[str]) -> List[ResolvedLib]
                 return True
         return False
 
-    for fname in os.listdir(path):
-        abs_file_path = os.path.abspath(os.path.join(path, fname))
-        if os.path.isfile(abs_file_path) and is_dso_matching_pattern(abs_file_path):
-            libraries.append(
-                ResolvedLib(name=fname, dirpath=path, fullpath=abs_file_path)
-            )
+    try:
+        for fname in os.listdir(path):
+            abs_file_path = os.path.abspath(os.path.join(path, fname))
+            if os.path.isfile(abs_file_path) and is_dso_matching_pattern(abs_file_path):
+                libraries.append(
+                    ResolvedLib(name=fname, dirpath=path, fullpath=abs_file_path)
+                )
+    except PermissionError as err:
+        print(f"WARNING: {err}", file=sys.stderr)
     return libraries
 
 
@@ -666,21 +672,21 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "ARGS",
-        type=str,
-        nargs="*",
+        nargs=argparse.REMAINDER,
         help="The args passed to the wrapped binary.",
         default=None,
     )
     args = parser.parse_args()
     if args.print_ld_library_path and args.NIX_BINARY:
         print(
-            "ERROR: -p and NIX_BINARY are both set. You have to choose between one of these options."
+            "ERROR: -p and NIX_BINARY are both set. You have to choose between one of these options.",
+            file=sys.stderr,
         )
-        print("       run nixglhost --help for more informations. ")
+        print("       run nixglhost --help for more informations. ", file=sys.stderr)
         sys.exit(1)
     elif not args.print_ld_library_path and not args.NIX_BINARY:
-        print("ERROR: Please set the NIX_BINARY you want to run.")
-        print("       run nixglhost --help for more informations. ")
+        print("ERROR: Please set the NIX_BINARY you want to run.", file=sys.stderr)
+        print("       run nixglhost --help for more informations. ", file=sys.stderr)
         sys.exit(1)
     ret = main(args)
     sys.exit(ret)

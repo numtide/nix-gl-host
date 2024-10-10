@@ -10,23 +10,25 @@
         "x86_64-linux"
         "aarch64-linux"
       ];
-      forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
-      pkgs = system: import nixpkgs {
-        inherit system;
-      };
+      eachSystem = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
     in
     {
-      defaultPackage = forAllSystems (system: import ./default.nix { pkgs = pkgs system; });
+      packages = eachSystem (pkgs: {
+        default = import ./. { inherit pkgs; };
+      });
 
-      legacyPackages = forAllSystems (system: (pkgs system));
+      defaultPackage = eachSystem (pkgs: self.packages.${pkgs.system}.default);
 
-      devShell = forAllSystems (system:
-        nixpkgs.legacyPackages.${system}.callPackage ./shell.nix { }
+      devShell = eachSystem (pkgs:
+        pkgs.callPackage ./shell.nix { }
       );
 
-      formatter = forAllSystems (system:
-        nixpkgs.legacyPackages.${system}.nixpkgs-fmt
-      );
+      overlays.default = final: _: {
+        nix-gl-host = final.callPackage ./default.nix { };
+      };
 
+      formatter = eachSystem (pkgs: pkgs.nixpkgs-fmt);
+
+      checks = self.packages;
     };
 }
