@@ -289,7 +289,16 @@ def get_ld_paths() -> List[str]:
                 PREFIX + "/usr/lib64",
             ]
         )
-    paths.extend(["/lib", "/usr/lib", "/lib64", "/usr/lib64"])
+    paths.extend(
+        [
+            "/lib",
+            "/usr/lib",
+            "/lib64",
+            "/usr/lib64",
+            "/run/opengl-driver/lib",
+            "/usr/lib/wsl/lib",
+        ]
+    )
     return [path for path in paths if os.path.isdir(path)]
 
 
