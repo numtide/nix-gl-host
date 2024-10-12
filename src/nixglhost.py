@@ -191,7 +191,6 @@ NVIDIA_DSO_PATTERNS = [
     "libnvidia-glsi\\.so.*$",
     "libnvidia-glvkspirv\\.so.*$",
     "libnvidia-gpucomp\\.so.*$",
-    "libnvidia-ml\\.so.*$",
     "libnvidia-ngx\\.so.*$",
     "libnvidia-nvvm\\.so.*$",
     "libnvidia-opencl\\.so.*$",
@@ -229,7 +228,11 @@ NVIDIA_DSO_PATTERNS = [
     "libdxcore\\.so.*$",
 ]
 
-CUDA_DSO_PATTERNS = ["libcudadebugger\\.so.*$", "libcuda\\.so.*$"]
+CUDA_DSO_PATTERNS = [
+    "libcudadebugger\\.so.*$",
+    "libcuda\\.so.*$",
+    "libnvidia-ml\\.so.*$",
+]
 
 GLX_DSO_PATTERNS = ["libGLX_nvidia\\.so.*$"]
 
