@@ -550,7 +550,6 @@ def nvidia_main(
     cache_file_path = os.path.join(cache_dir, "cache.json")
     lock_path = os.path.join(os.path.split(cache_dir)[0], "nix-gl-host.lock")
     cached_ld_library_path = os.path.join(cache_dir, "ld_library_path")
-    paths = get_ld_paths()
     egl_conf_dir = os.path.join(cache_dir, "egl-confs")
     nix_gl_ld_library_path: Optional[str] = None
     # Cache/Patch DSOs
@@ -566,7 +565,7 @@ def nvidia_main(
         log_info("Acquiring the cache lock")
         fcntl.flock(lock, fcntl.LOCK_EX)
         log_info("Cache lock acquired")
-        for path in paths:
+        for path in dso_vendor_paths:
             res = scan_dsos_from_dir(path)
             if res:
                 cache_content.paths.append(res)
